@@ -48,7 +48,7 @@ def main() -> None:
                 f"[bold]Rewriting item {rewritten_count + 1}/{args.count}...[/bold]"
             ):
                 response = ask_gemma4(
-                    prompt=build_easy_rewrite_prompt(text),
+                    prompt=build_hard_rewrite_prompt(text),
                     system_prompt=SYSTEM_PROMPT,
                 )
         except Exception as error:
