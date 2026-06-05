@@ -1,5 +1,6 @@
 import argparse
 import json
+from itertools import count
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -17,6 +18,7 @@ DATASET_NAME: str = "hotchpotch/fineweb-2-edu-japanese"
 DATASET_ROWS_URL: str = "https://datasets-server.huggingface.co/rows"
 SYSTEM_PROMPT: str = "あなたは日本語テキストの教育的価値を判定する専門家です。"
 TEXT_PREVIEW_LENGTH: int = 500
+MAX_TEXT_LENGTH: int = 2048
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +53,22 @@ def fetch_row(config: str, split: str, offset: int) -> dict[str, Any]:
     return dict(data["rows"][0]["row"])
 
 
+def build_result_table(item: dict[str, Any], text: str, judgement: str, offset: int) -> Table:
+    # ---------------------------------------------------------
+    # Build compact result output for terminal display.
+    # ---------------------------------------------------------
+    table = Table(show_header=False, box=None)
+    table.add_column("Field", style="bold cyan", no_wrap=True)
+    table.add_column("Value")
+    table.add_row("Offset", str(offset))
+    table.add_row("ID", str(item["id"]))
+    table.add_row("URL", str(item["url"]))
+    table.add_row("Text", text[:TEXT_PREVIEW_LENGTH].replace("\n", " "))
+    table.add_row("Judgement", judgement.strip())
+
+    return table
+
+
 def main() -> None:
     args = parse_args()
     console = Console()
@@ -60,40 +78,48 @@ def main() -> None:
     # ---------------------------------------------------------
     console.rule(f"[bold]Start judging {args.count} texts[/bold]")
 
-    for index in range(args.count):
-        item = fetch_row(config=args.config, split=args.split, offset=index)
+    judged_count = 0
+
+    for offset in count():
+        if judged_count >= args.count:
+            break
+
+        item = fetch_row(config=args.config, split=args.split, offset=offset)
         text = str(item["text"])
+
+        if len(text) > MAX_TEXT_LENGTH:
+            console.print(
+                Panel(
+                    f"Text length is {len(text)} characters.",
+                    title=f"Skipped offset {offset}",
+                    border_style="yellow",
+                )
+            )
+            continue
+
         prompt = build_prompt(text)
 
         # ---------------------------------------------------------
         # Skip rows when the AI response is empty or malformed.
         # ---------------------------------------------------------
         try:
-            with console.status(f"[bold]Judging item {index + 1}/{args.count}...[/bold]"):
+            with console.status(
+                f"[bold]Judging item {judged_count + 1}/{args.count}...[/bold]"
+            ):
                 judgement = ask_gemma4(prompt=prompt, system_prompt=SYSTEM_PROMPT)
         except Exception as error:
             console.print(
                 Panel(
                     str(error),
-                    title=f"Skipped {index + 1}",
+                    title=f"Skipped offset {offset}",
                     border_style="yellow",
                 )
             )
             continue
 
-        # ---------------------------------------------------------
-        # Show each judgement with compact metadata and text preview.
-        # ---------------------------------------------------------
-        table = Table(show_header=False, box=None)
-        table.add_column("Field", style="bold cyan", no_wrap=True)
-        table.add_column("Value")
-        table.add_row("Index", str(index))
-        table.add_row("ID", str(item["id"]))
-        table.add_row("URL", str(item["url"]))
-        table.add_row("Text", text[:TEXT_PREVIEW_LENGTH].replace("\n", " "))
-        table.add_row("Judgement", judgement.strip())
-
-        console.print(Panel(table, title=f"Result {index + 1}", border_style="green"))
+        judged_count += 1
+        table = build_result_table(item=item, text=text, judgement=judgement, offset=offset)
+        console.print(Panel(table, title=f"Result {judged_count}", border_style="green"))
 
     console.rule("[bold]Done[/bold]")
 
