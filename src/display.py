@@ -13,6 +13,7 @@ def build_result_table(
     text: str,
     rewrite: str,
     offset: int,
+    prompt_type: str,
     output_tokens: int | None,
 ) -> Table:
     # ---------------------------------------------------------
@@ -24,6 +25,7 @@ def build_result_table(
     table.add_row("Offset", str(offset))
     table.add_row("ID", str(item["id"]))
     table.add_row("URL", str(item["url"]))
+    table.add_row("Prompt Type", prompt_type)
     table.add_row("Text", text[:TEXT_PREVIEW_LENGTH].replace("\n", " "))
     table.add_row("Rewrite", rewrite.strip())
     table.add_row("Output Chars", str(len(rewrite)))
@@ -51,6 +53,7 @@ def print_result(
     text: str,
     rewrite: str,
     offset: int,
+    prompt_type: str,
     output_tokens: int | None,
     rewritten_count: int,
 ) -> None:
@@ -62,6 +65,7 @@ def print_result(
         text=text,
         rewrite=rewrite,
         offset=offset,
+        prompt_type=prompt_type,
         output_tokens=output_tokens,
     )
     console.print(

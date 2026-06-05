@@ -43,11 +43,15 @@ def fetch_rows(config: str, split: str, offset: int, length: int) -> list[dict[s
     return run_with_backoff(request_rows, is_rate_limit_error)
 
 
-def iter_rows(config: str, split: str) -> Iterator[tuple[int, dict[str, Any]]]:
+def iter_rows(
+    config: str,
+    split: str,
+    start_offset: int,
+) -> Iterator[tuple[int, dict[str, Any]]]:
     # ---------------------------------------------------------
     # Yield dataset rows while reducing API calls with batching.
     # ---------------------------------------------------------
-    offset = 0
+    offset = start_offset
 
     while True:
         rows = fetch_rows(config=config, split=split, offset=offset, length=BATCH_SIZE)
