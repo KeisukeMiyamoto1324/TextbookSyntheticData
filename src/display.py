@@ -12,9 +12,9 @@ def build_result_table(item: dict[str, Any], text: str, rewrite: str, offset: in
     # ---------------------------------------------------------
     # Build compact rewrite output for terminal display.
     # ---------------------------------------------------------
-    table = Table(show_header=False, box=None)
+    table = Table(show_header=False, box=None, expand=True)
     table.add_column("Field", style="bold cyan", no_wrap=True)
-    table.add_column("Value")
+    table.add_column("Value", overflow="fold", ratio=1)
     table.add_row("Offset", str(offset))
     table.add_row("ID", str(item["id"]))
     table.add_row("URL", str(item["url"]))
