@@ -1,4 +1,5 @@
 import os
+import time
 
 import openai
 from google.auth import default
@@ -7,6 +8,14 @@ from google.auth.transport.requests import Request
 
 from src.config import ENABLE_THINKING, LOCATION, MODEL, PROJECT_ID_ENV_NAME
 from src.retry import run_with_backoff
+
+
+REQUEST_INTERVAL_SECONDS: float = 1.0
+EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
+
+
+class EmptyChoicesError(Exception):
+    pass
 
 
 def create_client() -> openai.OpenAI:
@@ -30,11 +39,14 @@ def create_client() -> openai.OpenAI:
     )
 
 
-def is_rate_limit_error(error: Exception) -> bool:
+def is_retryable_error(error: Exception) -> bool:
     # ---------------------------------------------------------
-    # Detect Vertex AI rate limit errors from OpenAI SDK errors.
+    # Detect retryable Vertex AI and malformed response errors.
     # ---------------------------------------------------------
     if isinstance(error, openai.RateLimitError):
+        return True
+
+    if isinstance(error, EmptyChoicesError):
         return True
 
     return "429" in str(error)
@@ -42,12 +54,13 @@ def is_rate_limit_error(error: Exception) -> bool:
 
 def ask_gemma4(prompt: str, system_prompt: str) -> str:
     # ---------------------------------------------------------
-    # Retry rate limit errors with exponential backoff.
+    # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
     def request_completion() -> openai.types.chat.ChatCompletion:
         client = create_client()
+        time.sleep(REQUEST_INTERVAL_SECONDS)
 
-        return client.chat.completions.create(
+        response = client.chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -60,12 +73,20 @@ def ask_gemma4(prompt: str, system_prompt: str) -> str:
             },
         )
 
-    response = run_with_backoff(request_completion, is_rate_limit_error)
+        if isinstance(response, str):
+            raise ValueError(response)
+
+        if not response.choices:
+            raise EmptyChoicesError(EMPTY_CHOICES_ERROR_MESSAGE)
+
+        return response
+
+    response = run_with_backoff(request_completion, is_retryable_error)
 
     if isinstance(response, str):
         raise ValueError(response)
 
     if not response.choices:
-        raise ValueError("response does not contain choices")
+        raise ValueError(EMPTY_CHOICES_ERROR_MESSAGE)
 
     return response.choices[0].message.content or ""
