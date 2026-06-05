@@ -19,6 +19,8 @@ DATASET_ROWS_URL: str = "https://datasets-server.huggingface.co/rows"
 SYSTEM_PROMPT: str = "あなたは日本語テキストの教育的価値を判定する専門家です。"
 TEXT_PREVIEW_LENGTH: int = 500
 MAX_TEXT_LENGTH: int = 2048
+HIGH_LABEL: str = "高い"
+LOW_LABEL: str = "低い"
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +53,37 @@ def fetch_row(config: str, split: str, offset: int) -> dict[str, Any]:
         data = json.loads(response.read().decode("utf-8"))
 
     return dict(data["rows"][0]["row"])
+
+
+def parse_judgement_label(judgement: str) -> str | None:
+    # ---------------------------------------------------------
+    # Parse the final judgement label from the AI response.
+    # ---------------------------------------------------------
+    for line in judgement.splitlines():
+        if not line.startswith("判定:"):
+            continue
+
+        label = line.replace("判定:", "", 1).strip()
+
+        if label in {HIGH_LABEL, LOW_LABEL}:
+            return label
+
+    return None
+
+
+def select_border_color(judgement: str) -> str:
+    # ---------------------------------------------------------
+    # Change border color by judgement label.
+    # ---------------------------------------------------------
+    label = parse_judgement_label(judgement)
+
+    if label == HIGH_LABEL:
+        return "green"
+
+    if label == LOW_LABEL:
+        return "red"
+
+    return "yellow"
 
 
 def build_result_table(item: dict[str, Any], text: str, judgement: str, offset: int) -> Table:
@@ -119,7 +152,13 @@ def main() -> None:
 
         judged_count += 1
         table = build_result_table(item=item, text=text, judgement=judgement, offset=offset)
-        console.print(Panel(table, title=f"Result {judged_count}", border_style="green"))
+        console.print(
+            Panel(
+                table,
+                title=f"Result {judged_count}",
+                border_style=select_border_color(judgement),
+            )
+        )
 
     console.rule("[bold]Done[/bold]")
 
