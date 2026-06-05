@@ -1,26 +1,9 @@
 import argparse
-import json
-from itertools import count
-from typing import Any
-from urllib.parse import urlencode
-from urllib.request import urlopen
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
-from src.build_prompt import build_prompt
 from src.cli import positive_int
-from src.vertex_client import ask_gemma4
-
-
-DATASET_NAME: str = "hotchpotch/fineweb-2-edu-japanese"
-DATASET_ROWS_URL: str = "https://datasets-server.huggingface.co/rows"
-SYSTEM_PROMPT: str = "あなたは日本語テキストの教育的価値を判定する専門家です。"
-TEXT_PREVIEW_LENGTH: int = 500
-MAX_TEXT_LENGTH: int = 2048
-HIGH_LABEL: str = "高い"
-LOW_LABEL: str = "低い"
+from src.pipeline import run_judgements
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,132 +18,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def fetch_row(config: str, split: str, offset: int) -> dict[str, Any]:
-    # ---------------------------------------------------------
-    # Fetch one row from Hugging Face Dataset Viewer API.
-    # ---------------------------------------------------------
-    query = urlencode(
-        {
-            "dataset": DATASET_NAME,
-            "config": config,
-            "split": split,
-            "offset": offset,
-            "length": 1,
-        }
-    )
-
-    with urlopen(f"{DATASET_ROWS_URL}?{query}") as response:
-        data = json.loads(response.read().decode("utf-8"))
-
-    return dict(data["rows"][0]["row"])
-
-
-def parse_judgement_label(judgement: str) -> str | None:
-    # ---------------------------------------------------------
-    # Parse the final judgement label from the AI response.
-    # ---------------------------------------------------------
-    for line in judgement.splitlines():
-        if not line.startswith("判定:"):
-            continue
-
-        label = line.replace("判定:", "", 1).strip()
-
-        if label in {HIGH_LABEL, LOW_LABEL}:
-            return label
-
-    return None
-
-
-def select_border_color(judgement: str) -> str:
-    # ---------------------------------------------------------
-    # Change border color by judgement label.
-    # ---------------------------------------------------------
-    label = parse_judgement_label(judgement)
-
-    if label == HIGH_LABEL:
-        return "green"
-
-    if label == LOW_LABEL:
-        return "red"
-
-    return "yellow"
-
-
-def build_result_table(item: dict[str, Any], text: str, judgement: str, offset: int) -> Table:
-    # ---------------------------------------------------------
-    # Build compact result output for terminal display.
-    # ---------------------------------------------------------
-    table = Table(show_header=False, box=None)
-    table.add_column("Field", style="bold cyan", no_wrap=True)
-    table.add_column("Value")
-    table.add_row("Offset", str(offset))
-    table.add_row("ID", str(item["id"]))
-    table.add_row("URL", str(item["url"]))
-    table.add_row("Text", text[:TEXT_PREVIEW_LENGTH].replace("\n", " "))
-    table.add_row("Judgement", judgement.strip())
-
-    return table
-
-
 def main() -> None:
     args = parse_args()
     console = Console()
-
-    # ---------------------------------------------------------
-    # Fetch dataset rows one by one and judge each text.
-    # ---------------------------------------------------------
-    console.rule(f"[bold]Start judging {args.count} texts[/bold]")
-
-    judged_count = 0
-
-    for offset in count():
-        if judged_count >= args.count:
-            break
-
-        item = fetch_row(config=args.config, split=args.split, offset=offset)
-        text = str(item["text"])
-
-        if len(text) > MAX_TEXT_LENGTH:
-            console.print(
-                Panel(
-                    f"Text length is {len(text)} characters.",
-                    title=f"Skipped offset {offset}",
-                    border_style="yellow",
-                )
-            )
-            continue
-
-        prompt = build_prompt(text)
-
-        # ---------------------------------------------------------
-        # Skip rows when the AI response is empty or malformed.
-        # ---------------------------------------------------------
-        try:
-            with console.status(
-                f"[bold]Judging item {judged_count + 1}/{args.count}...[/bold]"
-            ):
-                judgement = ask_gemma4(prompt=prompt, system_prompt=SYSTEM_PROMPT)
-        except Exception as error:
-            console.print(
-                Panel(
-                    str(error),
-                    title=f"Skipped offset {offset}",
-                    border_style="yellow",
-                )
-            )
-            continue
-
-        judged_count += 1
-        table = build_result_table(item=item, text=text, judgement=judgement, offset=offset)
-        console.print(
-            Panel(
-                table,
-                title=f"Result {judged_count}",
-                border_style=select_border_color(judgement),
-            )
-        )
-
-    console.rule("[bold]Done[/bold]")
+    run_judgements(console, args.count, args.config, args.split)
 
 
 if __name__ == "__main__":
