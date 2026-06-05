@@ -2,15 +2,14 @@ import argparse
 
 from rich.console import Console
 
-from src.build_prompt import build_prompt
+from src.build_prompt import build_rewrite_prompt
 from src.cli import positive_int
 from src.dataset_client import iter_rows
-from src.display import build_stats_table, print_result, print_skip
-from src.judgement import SKIPPED_KEY, create_stats, update_stats
+from src.display import print_result, print_skip
 from src.vertex_client import ask_gemma4
 
 
-SYSTEM_PROMPT: str = "あなたは日本語テキストの教育的価値を判定する専門家です。"
+SYSTEM_PROMPT: str = "あなたは日本語テキストを大学生向け教材文に書き換える専門家です。"
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     # Read generation settings from the command line.
     # ---------------------------------------------------------
     parser = argparse.ArgumentParser()
-    parser.add_argument("--count", type=positive_int, default=20)
+    parser.add_argument("--count", type=positive_int, default=3)
     parser.add_argument("--config", type=str, default="default")
     parser.add_argument("--split", type=str, default="train")
 
@@ -28,52 +27,48 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     console = Console()
-    stats = create_stats()
-    judged_count = 0
+    rewritten_count = 0
 
     # ---------------------------------------------------------
-    # Read rows until the requested number of valid texts is judged.
+    # Read rows until the requested number of valid texts is rewritten.
     # ---------------------------------------------------------
-    console.rule(f"[bold]Start judging {args.count} texts[/bold]")
+    console.rule(f"[bold]Start rewriting {args.count} texts[/bold]")
 
     for offset, item in iter_rows(config=args.config, split=args.split):
-        if judged_count >= args.count:
+        if rewritten_count >= args.count:
             break
 
         text = str(item["text"])
 
         # ---------------------------------------------------------
-        # Judge one text. Failed AI responses are skipped.
+        # Rewrite one text. Failed AI responses are skipped.
         # ---------------------------------------------------------
         try:
             with console.status(
-                f"[bold]Judging item {judged_count + 1}/{args.count}...[/bold]"
+                f"[bold]Rewriting item {rewritten_count + 1}/{args.count}...[/bold]"
             ):
-                judgement = ask_gemma4(
-                    prompt=build_prompt(text),
+                rewrite = ask_gemma4(
+                    prompt=build_rewrite_prompt(text),
                     system_prompt=SYSTEM_PROMPT,
                 )
         except Exception as error:
             print_skip(console, str(error), offset)
-            stats[SKIPPED_KEY] += 1
             continue
 
-        judged_count += 1
-        update_stats(stats, judgement)
+        rewritten_count += 1
         print_result(
             console=console,
             item=item,
             text=text,
-            judgement=judgement,
+            rewrite=rewrite,
             offset=offset,
-            judged_count=judged_count,
+            rewritten_count=rewritten_count,
         )
 
     # ---------------------------------------------------------
-    # Show final judgement statistics.
+    # Finish terminal output.
     # ---------------------------------------------------------
     console.rule("[bold]Done[/bold]")
-    console.print(build_stats_table(stats))
 
 
 if __name__ == "__main__":
