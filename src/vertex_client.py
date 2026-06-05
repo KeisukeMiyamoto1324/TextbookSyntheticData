@@ -6,6 +6,7 @@ from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
 
 from src.config import ENABLE_THINKING, LOCATION, MODEL, PROJECT_ID_ENV_NAME
+from src.retry import run_with_backoff
 
 
 def create_client() -> openai.OpenAI:
@@ -29,24 +30,40 @@ def create_client() -> openai.OpenAI:
     )
 
 
+def is_rate_limit_error(error: Exception) -> bool:
+    # ---------------------------------------------------------
+    # Detect Vertex AI rate limit errors from OpenAI SDK errors.
+    # ---------------------------------------------------------
+    if isinstance(error, openai.RateLimitError):
+        return True
+
+    return "429" in str(error)
+
+
 def ask_gemma4(prompt: str, system_prompt: str) -> str:
     # ---------------------------------------------------------
-    # Create a fresh client with a valid access token.
+    # Retry rate limit errors with exponential backoff.
     # ---------------------------------------------------------
-    client = create_client()
+    def request_completion() -> openai.types.chat.ChatCompletion:
+        client = create_client()
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
-        extra_body={
-            "chat_template_kwargs": {
-                "enable_thinking": ENABLE_THINKING,
+        return client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            extra_body={
+                "chat_template_kwargs": {
+                    "enable_thinking": ENABLE_THINKING,
+                },
             },
-        },
-    )
+        )
+
+    response = run_with_backoff(request_completion, is_rate_limit_error)
+
+    if isinstance(response, str):
+        raise ValueError(response)
 
     if not response.choices:
         raise ValueError("response does not contain choices")

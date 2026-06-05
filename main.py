@@ -1,18 +1,16 @@
 import argparse
-from itertools import count
 
 from rich.console import Console
 
 from src.build_prompt import build_prompt
 from src.cli import positive_int
-from src.dataset_client import fetch_row
+from src.dataset_client import iter_rows
 from src.display import build_stats_table, print_result, print_skip
 from src.judgement import SKIPPED_KEY, create_stats, update_stats
 from src.vertex_client import ask_gemma4
 
 
 SYSTEM_PROMPT: str = "あなたは日本語テキストの教育的価値を判定する専門家です。"
-MAX_TEXT_LENGTH: int = 2048
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,11 +36,10 @@ def main() -> None:
     # ---------------------------------------------------------
     console.rule(f"[bold]Start judging {args.count} texts[/bold]")
 
-    for offset in count():
+    for offset, item in iter_rows(config=args.config, split=args.split):
         if judged_count >= args.count:
             break
 
-        item = fetch_row(config=args.config, split=args.split, offset=offset)
         text = str(item["text"])
 
         # ---------------------------------------------------------
