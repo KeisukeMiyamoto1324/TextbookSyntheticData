@@ -9,7 +9,7 @@ from src.display import print_result, print_skip
 from src.vertex_client import ask_gemma4
 
 
-SYSTEM_PROMPT: str = "あなたは日本語テキストを大学生向け教材文に書き換える専門家です。"
+SYSTEM_PROMPT: str = ""
 
 
 def parse_args() -> argparse.Namespace:
