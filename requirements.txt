@@ -1,0 +1,6 @@
+datasets
+google-auth
+openai
+python-dotenv
+pytest
+rich
