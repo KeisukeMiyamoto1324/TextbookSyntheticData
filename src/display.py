@@ -8,7 +8,13 @@ from rich.table import Table
 TEXT_PREVIEW_LENGTH: int = 500
 
 
-def build_result_table(item: dict[str, Any], text: str, rewrite: str, offset: int) -> Table:
+def build_result_table(
+    item: dict[str, Any],
+    text: str,
+    rewrite: str,
+    offset: int,
+    output_tokens: int | None,
+) -> Table:
     # ---------------------------------------------------------
     # Build compact rewrite output for terminal display.
     # ---------------------------------------------------------
@@ -20,6 +26,8 @@ def build_result_table(item: dict[str, Any], text: str, rewrite: str, offset: in
     table.add_row("URL", str(item["url"]))
     table.add_row("Text", text[:TEXT_PREVIEW_LENGTH].replace("\n", " "))
     table.add_row("Rewrite", rewrite.strip())
+    table.add_row("Output Chars", str(len(rewrite)))
+    table.add_row("Output Tokens", str(output_tokens) if output_tokens is not None else "N/A")
 
     return table
 
@@ -43,12 +51,19 @@ def print_result(
     text: str,
     rewrite: str,
     offset: int,
+    output_tokens: int | None,
     rewritten_count: int,
 ) -> None:
     # ---------------------------------------------------------
     # Print one rewrite result.
     # ---------------------------------------------------------
-    table = build_result_table(item=item, text=text, rewrite=rewrite, offset=offset)
+    table = build_result_table(
+        item=item,
+        text=text,
+        rewrite=rewrite,
+        offset=offset,
+        output_tokens=output_tokens,
+    )
     console.print(
         Panel(
             table,

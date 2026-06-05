@@ -1,5 +1,6 @@
 import os
 import time
+from dataclasses import dataclass
 
 import openai
 from google.auth import default
@@ -12,6 +13,12 @@ from src.retry import run_with_backoff
 
 REQUEST_INTERVAL_SECONDS: float = 1.0
 EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
+
+
+@dataclass(frozen=True)
+class GemmaResponse:
+    text: str
+    output_tokens: int | None
 
 
 class EmptyChoicesError(Exception):
@@ -52,7 +59,7 @@ def is_retryable_error(error: Exception) -> bool:
     return "429" in str(error)
 
 
-def ask_gemma4(prompt: str, system_prompt: str) -> str:
+def ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
@@ -89,4 +96,10 @@ def ask_gemma4(prompt: str, system_prompt: str) -> str:
     if not response.choices:
         raise ValueError(EMPTY_CHOICES_ERROR_MESSAGE)
 
-    return response.choices[0].message.content or ""
+    # ---------------------------------------------------------
+    # Return generated text with token usage from Vertex AI.
+    # ---------------------------------------------------------
+    return GemmaResponse(
+        text=response.choices[0].message.content or "",
+        output_tokens=response.usage.completion_tokens if response.usage else None,
+    )

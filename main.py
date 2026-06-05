@@ -47,7 +47,7 @@ def main() -> None:
             with console.status(
                 f"[bold]Rewriting item {rewritten_count + 1}/{args.count}...[/bold]"
             ):
-                rewrite = ask_gemma4(
+                response = ask_gemma4(
                     prompt=build_rewrite_prompt(text),
                     system_prompt=SYSTEM_PROMPT,
                 )
@@ -60,8 +60,9 @@ def main() -> None:
             console=console,
             item=item,
             text=text,
-            rewrite=rewrite,
+            rewrite=response.text,
             offset=offset,
+            output_tokens=response.output_tokens,
             rewritten_count=rewritten_count,
         )
 
