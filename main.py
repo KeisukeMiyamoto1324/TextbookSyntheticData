@@ -45,11 +45,6 @@ def main() -> None:
         item = fetch_row(config=args.config, split=args.split, offset=offset)
         text = str(item["text"])
 
-        if len(text) > MAX_TEXT_LENGTH:
-            print_skip(console, f"Text length is {len(text)} characters.", offset)
-            stats[SKIPPED_KEY] += 1
-            continue
-
         # ---------------------------------------------------------
         # Judge one text. Failed AI responses are skipped.
         # ---------------------------------------------------------
