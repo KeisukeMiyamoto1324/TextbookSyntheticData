@@ -1,4 +1,3 @@
-import os
 import time
 from dataclasses import dataclass
 
@@ -7,7 +6,8 @@ from google.auth import default
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
 
-from src.config import ENABLE_THINKING, LOCATION, MODEL, PROJECT_ID_ENV_NAME
+from src.config import ENABLE_THINKING, LOCATION, MODEL
+from src.project_router import project_router
 from src.retry import run_with_backoff
 
 
@@ -25,12 +25,11 @@ class EmptyChoicesError(Exception):
     pass
 
 
-def create_client() -> openai.OpenAI:
+def create_client(project_id: str) -> openai.OpenAI:
     # ---------------------------------------------------------
     # Refresh the access token before each API client creation.
     # This avoids using an expired token in long-running jobs.
     # ---------------------------------------------------------
-    project_id = os.environ[PROJECT_ID_ENV_NAME]
     credentials: Credentials
     credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
@@ -64,7 +63,8 @@ def ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
     def request_completion() -> openai.types.chat.ChatCompletion:
-        client = create_client()
+        project_id = project_router.next_project_id()
+        client = create_client(project_id)
         time.sleep(REQUEST_INTERVAL_SECONDS)
 
         response = client.chat.completions.create(
