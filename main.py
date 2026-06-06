@@ -3,6 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
 from src.build_prompt import (
     build_easy_rewrite_prompt,
@@ -86,29 +87,41 @@ def main() -> None:
         return job
 
     with JsonlRecordWriter(output_path) as writer:
-        for result in iter_rewrite_job_queue(
-            get_next_job=get_next_job,
-            workers=args.workers,
-            system_prompt=SYSTEM_PROMPT,
-        ):
-            if isinstance(result, RewriteFailure):
-                print_skip(console, result.message, result.offset)
-                continue
+        progress = Progress(
+            TextColumn("[bold]Generating[/bold]"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total} texts"),
+            TimeElapsedColumn(),
+            console=console,
+        )
 
-            written_count += 1
-            record = result.record
-            writer.write(record)
+        with progress:
+            task_id = progress.add_task("Generating", total=args.count)
 
-            print_result(
-                console=console,
-                item=result.job.item,
-                text=result.job.text,
-                rewrite=record.rewrite,
-                offset=result.job.offset,
-                prompt_type=record.prompt_type,
-                output_tokens=record.output_tokens,
-                rewritten_count=written_count,
-            )
+            for result in iter_rewrite_job_queue(
+                get_next_job=get_next_job,
+                workers=args.workers,
+                system_prompt=SYSTEM_PROMPT,
+            ):
+                if isinstance(result, RewriteFailure):
+                    print_skip(console, result.message, result.offset)
+                    continue
+
+                written_count += 1
+                record = result.record
+                writer.write(record)
+                progress.update(task_id, advance=1)
+
+                print_result(
+                    console=console,
+                    item=result.job.item,
+                    text=result.job.text,
+                    rewrite=record.rewrite,
+                    offset=result.job.offset,
+                    prompt_type=record.prompt_type,
+                    output_tokens=record.output_tokens,
+                    rewritten_count=written_count,
+                )
 
     # ---------------------------------------------------------
     # Finish terminal output after all saved records are flushed.
