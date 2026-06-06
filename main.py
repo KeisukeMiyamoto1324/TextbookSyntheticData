@@ -13,7 +13,7 @@ from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
 from src.json_writer import JsonlRecordWriter, build_results_jsonl_path
-from src.rewrite_runner import RewriteFailure, RewriteJob, run_rewrite_jobs
+from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
 
 
 SYSTEM_PROMPT: str = ""
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=str, default="default")
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
-    parser.add_argument("--workers", type=positive_int, default=4)
+    parser.add_argument("--workers", type=positive_int, default=10)
 
     return parser.parse_args()
 
@@ -52,76 +52,63 @@ def main() -> None:
     job_index = 0
 
     # ---------------------------------------------------------
-    # Rewrite rows in small batches and save each record immediately.
+    # Rewrite rows continuously and refill workers as they finish.
     # ---------------------------------------------------------
     console.rule(
         f"[bold]Start rewriting {args.count} texts from offset {args.offset} "
         f"with {args.workers} workers[/bold]"
     )
 
+    def get_next_job(active_count: int) -> RewriteJob | None:
+        nonlocal job_index
+
+        if written_count + active_count >= args.count:
+            return None
+
+        try:
+            offset, item = next(row_iterator)
+        except StopIteration:
+            return None
+
+        text = str(item["text"])
+        prompt_type, build_prompt = PROMPT_BUILDERS[job_index % len(PROMPT_BUILDERS)]
+        prompt = build_prompt(text)
+        job = RewriteJob(
+            index=job_index,
+            offset=offset,
+            item=item,
+            text=text,
+            prompt_type=prompt_type,
+            prompt=prompt,
+        )
+        job_index += 1
+
+        return job
+
     with JsonlRecordWriter(output_path) as writer:
-        while written_count < args.count:
-            jobs: list[RewriteJob] = []
+        for result in iter_rewrite_job_queue(
+            get_next_job=get_next_job,
+            workers=args.workers,
+            system_prompt=SYSTEM_PROMPT,
+        ):
+            if isinstance(result, RewriteFailure):
+                print_skip(console, result.message, result.offset)
+                continue
 
-            for _ in range(args.workers):
-                if written_count + len(jobs) >= args.count:
-                    break
+            written_count += 1
+            record = result.record
+            writer.write(record)
 
-                try:
-                    offset, item = next(row_iterator)
-                except StopIteration:
-                    break
-
-                text = str(item["text"])
-                prompt_type, build_prompt = PROMPT_BUILDERS[job_index % len(PROMPT_BUILDERS)]
-                prompt = build_prompt(text)
-                jobs.append(
-                    RewriteJob(
-                        index=job_index,
-                        offset=offset,
-                        item=item,
-                        text=text,
-                        prompt_type=prompt_type,
-                        prompt=prompt,
-                    )
-                )
-                job_index += 1
-
-            if not jobs:
-                break
-
-            # ---------------------------------------------------------
-            # Run only one small batch to avoid storing many records.
-            # ---------------------------------------------------------
-            with console.status("[bold]Rewriting texts...[/bold]"):
-                results = run_rewrite_jobs(
-                    jobs=jobs,
-                    workers=args.workers,
-                    system_prompt=SYSTEM_PROMPT,
-                )
-
-            for result in results:
-                if isinstance(result, RewriteFailure):
-                    print_skip(console, result.message, result.offset)
-                    continue
-
-                written_count += 1
-                record = result.record
-                writer.write(record)
-
-                print_result(
-                    console=console,
-                    item=result.job.item,
-                    text=result.job.text,
-                    rewrite=record.rewrite,
-                    offset=result.job.offset,
-                    prompt_type=record.prompt_type,
-                    output_tokens=record.output_tokens,
-                    rewritten_count=written_count,
-                )
-
-                if written_count >= args.count:
-                    break
+            print_result(
+                console=console,
+                item=result.job.item,
+                text=result.job.text,
+                rewrite=record.rewrite,
+                offset=result.job.offset,
+                prompt_type=record.prompt_type,
+                output_tokens=record.output_tokens,
+                rewritten_count=written_count,
+            )
 
     # ---------------------------------------------------------
     # Finish terminal output after all saved records are flushed.

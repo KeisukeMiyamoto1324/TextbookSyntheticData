@@ -2,7 +2,13 @@ import time
 
 import pytest
 
-from src.rewrite_runner import RewriteFailure, RewriteJob, RewriteSuccess, run_rewrite_jobs
+from src.rewrite_runner import (
+    RewriteFailure,
+    RewriteJob,
+    RewriteSuccess,
+    iter_rewrite_job_queue,
+    run_rewrite_jobs,
+)
 from src.vertex_client import GemmaResponse
 
 
@@ -109,3 +115,36 @@ def test_run_rewrite_jobs_returns_input_order_after_out_of_order_completion(
     )
 
     assert [result.index for result in results] == [0, 1, 2]
+
+
+def test_iter_rewrite_job_queue_refills_worker_after_one_job_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ---------------------------------------------------------
+    # Verify that a finished worker receives the next job immediately.
+    # ---------------------------------------------------------
+    jobs = iter([build_job(0), build_job(1), build_job(2)])
+
+    def get_next_job(active_count: int) -> RewriteJob | None:
+        try:
+            return next(jobs)
+        except StopIteration:
+            return None
+
+    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+        if prompt == "prompt-0":
+            time.sleep(0.05)
+
+        return GemmaResponse(text=f"rewrite for {prompt}", output_tokens=10)
+
+    monkeypatch.setattr("src.rewrite_runner.ask_gemma4", fake_ask_gemma4)
+
+    results = list(
+        iter_rewrite_job_queue(
+            get_next_job=get_next_job,
+            workers=2,
+            system_prompt="system",
+        )
+    )
+
+    assert [result.index for result in results] == [1, 2, 0]
