@@ -18,9 +18,9 @@ from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queu
 
 SYSTEM_PROMPT: str = ""
 PROMPT_BUILDERS: tuple[tuple[str, Callable[[str], str]], ...] = (
-    ("hard", build_hard_rewrite_prompt),
-    ("medium", build_medium_rewrite_prompt),
-    ("easy", build_easy_rewrite_prompt),
+    ("high-school", build_hard_rewrite_prompt),
+    ("junior-high-school", build_medium_rewrite_prompt),
+    ("elementary-school", build_easy_rewrite_prompt),
 )
 
 

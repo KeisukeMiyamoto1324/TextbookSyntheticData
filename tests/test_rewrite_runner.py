@@ -24,7 +24,7 @@ def build_job(index: int) -> RewriteJob:
             "url": f"https://example.com/{index}",
         },
         text=f"text-{index}",
-        prompt_type="hard",
+        prompt_type="high-school",
         prompt=f"prompt-{index}",
     )
 

@@ -25,7 +25,7 @@ def test_jsonl_record_writer_flushes_one_record_per_line(tmp_path: Path) -> None
         source_id="source-1",
         url="https://example.com",
         source_text="source text",
-        prompt_type="hard",
+        prompt_type="high-school",
         prompt="prompt",
         rewrite="rewrite",
         output_chars=7,
