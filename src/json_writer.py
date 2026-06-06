@@ -2,20 +2,41 @@ import json
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from types import TracebackType
+from typing import Self
 
 from src.rewrite_record import RewriteRecord
 
 
-def write_results_json(output_dir: Path, records: list[RewriteRecord]) -> Path:
+def build_results_jsonl_path(output_dir: Path) -> Path:
     # ---------------------------------------------------------
-    # Save rewrite results to a timestamped JSON file.
+    # Build a timestamped JSON Lines output path.
     # ---------------------------------------------------------
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"rewrites_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-    data = [asdict(record) for record in records]
+    return output_dir / f"rewrites_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
-    with output_path.open("w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
 
-    return output_path
+class JsonlRecordWriter:
+    def __init__(self, output_path: Path) -> None:
+        self.output_path = output_path
+        self.file = output_path.open("w", encoding="utf-8")
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.file.close()
+
+    def write(self, record: RewriteRecord) -> None:
+        # ---------------------------------------------------------
+        # Save one record immediately as a JSON Lines entry.
+        # ---------------------------------------------------------
+        json.dump(asdict(record), self.file, ensure_ascii=False)
+        self.file.write("\n")
+        self.file.flush()

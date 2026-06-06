@@ -12,8 +12,7 @@ from src.build_prompt import (
 from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
-from src.json_writer import write_results_json
-from src.rewrite_record import RewriteRecord
+from src.json_writer import JsonlRecordWriter, build_results_jsonl_path
 from src.rewrite_runner import RewriteFailure, RewriteJob, run_rewrite_jobs
 
 
@@ -43,76 +42,91 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     console = Console()
-    jobs: list[RewriteJob] = []
-    records: list[RewriteRecord] = []
+    output_path = build_results_jsonl_path(args.output_dir)
+    row_iterator = iter_rows(
+        config=args.config,
+        split=args.split,
+        start_offset=args.offset,
+    )
+    written_count = 0
+    job_index = 0
 
     # ---------------------------------------------------------
-    # Read rows and prepare rewrite jobs before threaded generation.
+    # Rewrite rows in small batches and save each record immediately.
     # ---------------------------------------------------------
     console.rule(
         f"[bold]Start rewriting {args.count} texts from offset {args.offset} "
         f"with {args.workers} workers[/bold]"
     )
 
-    for offset, item in iter_rows(
-        config=args.config,
-        split=args.split,
-        start_offset=args.offset,
-    ):
-        if len(jobs) >= args.count:
-            break
+    with JsonlRecordWriter(output_path) as writer:
+        while written_count < args.count:
+            jobs: list[RewriteJob] = []
 
-        text = str(item["text"])
-        prompt_type, build_prompt = PROMPT_BUILDERS[len(jobs) % len(PROMPT_BUILDERS)]
-        prompt = build_prompt(text)
-        jobs.append(
-            RewriteJob(
-                index=len(jobs),
-                offset=offset,
-                item=item,
-                text=text,
-                prompt_type=prompt_type,
-                prompt=prompt,
-            )
-        )
+            for _ in range(args.workers):
+                if written_count + len(jobs) >= args.count:
+                    break
+
+                try:
+                    offset, item = next(row_iterator)
+                except StopIteration:
+                    break
+
+                text = str(item["text"])
+                prompt_type, build_prompt = PROMPT_BUILDERS[job_index % len(PROMPT_BUILDERS)]
+                prompt = build_prompt(text)
+                jobs.append(
+                    RewriteJob(
+                        index=job_index,
+                        offset=offset,
+                        item=item,
+                        text=text,
+                        prompt_type=prompt_type,
+                        prompt=prompt,
+                    )
+                )
+                job_index += 1
+
+            if not jobs:
+                break
+
+            # ---------------------------------------------------------
+            # Run only one small batch to avoid storing many records.
+            # ---------------------------------------------------------
+            with console.status("[bold]Rewriting texts...[/bold]"):
+                results = run_rewrite_jobs(
+                    jobs=jobs,
+                    workers=args.workers,
+                    system_prompt=SYSTEM_PROMPT,
+                )
+
+            for result in results:
+                if isinstance(result, RewriteFailure):
+                    print_skip(console, result.message, result.offset)
+                    continue
+
+                written_count += 1
+                record = result.record
+                writer.write(record)
+
+                print_result(
+                    console=console,
+                    item=result.job.item,
+                    text=result.job.text,
+                    rewrite=record.rewrite,
+                    offset=result.job.offset,
+                    prompt_type=record.prompt_type,
+                    output_tokens=record.output_tokens,
+                    rewritten_count=written_count,
+                )
+
+                if written_count >= args.count:
+                    break
 
     # ---------------------------------------------------------
-    # Run prepared jobs while hiding thread handling in the runner.
+    # Finish terminal output after all saved records are flushed.
     # ---------------------------------------------------------
-    with console.status("[bold]Rewriting texts...[/bold]"):
-        results = run_rewrite_jobs(
-            jobs=jobs,
-            workers=args.workers,
-            system_prompt=SYSTEM_PROMPT,
-        )
-
-    rewritten_count = 0
-
-    for result in results:
-        if isinstance(result, RewriteFailure):
-            print_skip(console, result.message, result.offset)
-            continue
-
-        rewritten_count += 1
-        record = result.record
-        records.append(record)
-
-        print_result(
-            console=console,
-            item=result.job.item,
-            text=result.job.text,
-            rewrite=record.rewrite,
-            offset=result.job.offset,
-            prompt_type=record.prompt_type,
-            output_tokens=record.output_tokens,
-            rewritten_count=rewritten_count,
-        )
-
-    # ---------------------------------------------------------
-    # Save JSON results and finish terminal output.
-    # ---------------------------------------------------------
-    output_path = write_results_json(args.output_dir, records)
-    console.print(f"Saved JSON: {output_path}")
+    console.print(f"Saved JSONL: {output_path}")
     console.rule("[bold]Done[/bold]")
 
 
