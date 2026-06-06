@@ -1,7 +1,6 @@
 import argparse
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from rich.console import Console
 
@@ -14,6 +13,7 @@ from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
 from src.json_writer import write_results_json
+from src.rewrite_record import RewriteRecord
 from src.vertex_client import ask_gemma4
 
 
@@ -43,7 +43,7 @@ def main() -> None:
     args = parse_args()
     console = Console()
     rewritten_count = 0
-    records: list[dict[str, Any]] = []
+    records: list[RewriteRecord] = []
 
     # ---------------------------------------------------------
     # Read rows until the requested number of valid texts is rewritten.
@@ -59,60 +59,50 @@ def main() -> None:
             break
 
         text = str(item["text"])
-        outputs: list[dict[str, Any]] = []
+        prompt_type, build_prompt = PROMPT_BUILDERS[rewritten_count % len(PROMPT_BUILDERS)]
+        prompt = build_prompt(text)
+        record: RewriteRecord
 
         # ---------------------------------------------------------
-        # Rewrite one text with all prompt types.
+        # Rewrite one text with one prompt type in rotation.
         # ---------------------------------------------------------
         try:
-            for prompt_type, build_prompt in PROMPT_BUILDERS:
-                prompt = build_prompt(text)
-                status = (
-                    f"[bold]Rewriting item {rewritten_count + 1}/{args.count} "
-                    f"with {prompt_type} prompt...[/bold]"
+            status = (
+                f"[bold]Rewriting item {rewritten_count + 1}/{args.count} "
+                f"with {prompt_type} prompt...[/bold]"
+            )
+
+            with console.status(status):
+                response = ask_gemma4(
+                    prompt=prompt,
+                    system_prompt=SYSTEM_PROMPT,
                 )
 
-                with console.status(status):
-                    response = ask_gemma4(
-                        prompt=prompt,
-                        system_prompt=SYSTEM_PROMPT,
-                    )
-
-                outputs.append(
-                    {
-                        "prompt_type": prompt_type,
-                        "prompt": prompt,
-                        "rewrite": response.text,
-                        "output_chars": len(response.text),
-                        "output_tokens": response.output_tokens,
-                    }
-                )
+            record = RewriteRecord.from_generation(
+                offset=offset,
+                item=item,
+                text=text,
+                prompt_type=prompt_type,
+                prompt=prompt,
+                response=response,
+            )
         except Exception as error:
             print_skip(console, str(error), offset)
             continue
 
         rewritten_count += 1
-        records.append(
-            {
-                "offset": offset,
-                "id": item["id"],
-                "url": item["url"],
-                "text": text,
-                "outputs": outputs,
-            }
-        )
+        records.append(record)
 
-        for output in outputs:
-            print_result(
-                console=console,
-                item=item,
-                text=text,
-                rewrite=str(output["rewrite"]),
-                offset=offset,
-                prompt_type=str(output["prompt_type"]),
-                output_tokens=output["output_tokens"],
-                rewritten_count=rewritten_count,
-            )
+        print_result(
+            console=console,
+            item=item,
+            text=text,
+            rewrite=record.rewrite,
+            offset=offset,
+            prompt_type=record.prompt_type,
+            output_tokens=record.output_tokens,
+            rewritten_count=rewritten_count,
+        )
 
     # ---------------------------------------------------------
     # Save JSON results and finish terminal output.
