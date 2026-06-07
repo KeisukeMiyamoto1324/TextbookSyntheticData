@@ -7,9 +7,9 @@ from concurrent.futures import (
     wait,
 )
 from dataclasses import dataclass
-from threading import Lock
 from typing import Any
 
+from src.project_worker_pool import ProjectWorkerPool
 from src.project_router import project_router
 from src.rewrite_record import RewriteRecord
 from src.vertex_client import ask_gemma4
@@ -43,154 +43,6 @@ class RewriteFailure:
 
 RewriteResult = RewriteSuccess | RewriteFailure
 GetNextJob = Callable[[int], RewriteJob | None]
-SUCCESS_SCALE_STEP: int = 3
-FAILURE_SCALE_STEP: int = 2
-REQUEST_FAILURE_SCALE_FACTOR: float = 0.8
-
-
-class WorkerScaler:
-    def __init__(self, max_workers: int) -> None:
-        self.max_workers = max_workers
-        self.current_workers = 1
-        self.success_streak = 0
-        self.failure_streak = 0
-        self.lock = Lock()
-
-    @property
-    def worker_count(self) -> int:
-        # ---------------------------------------------------------
-        # Return the active concurrency limit with thread safety.
-        # ---------------------------------------------------------
-        with self.lock:
-            return self.current_workers
-
-    def record_success(self) -> None:
-        # ---------------------------------------------------------
-        # Increase concurrency slowly after stable successful output.
-        # ---------------------------------------------------------
-        with self.lock:
-            self.success_streak += 1
-            self.failure_streak = 0
-
-            if self.success_streak < SUCCESS_SCALE_STEP:
-                return
-
-            self.current_workers = min(self.max_workers, self.current_workers + 1)
-            self.success_streak = 0
-
-    def record_error(self, error: Exception) -> None:
-        # ---------------------------------------------------------
-        # Reduce concurrency when Vertex reports temporary pressure.
-        # ---------------------------------------------------------
-        with self.lock:
-            self.success_streak = 0
-
-            if not is_request_failure_error(error):
-                self.failure_streak = 0
-                return
-
-            self.failure_streak += 1
-
-            if self.failure_streak < FAILURE_SCALE_STEP:
-                return
-
-            self.current_workers = max(
-                1,
-                int(self.current_workers * REQUEST_FAILURE_SCALE_FACTOR),
-            )
-            self.failure_streak = 0
-
-
-class ProjectWorkerPool:
-    def __init__(self, project_ids: list[str], max_workers_per_project: int) -> None:
-        if not project_ids:
-            raise ValueError("Google Cloud project ID is not set")
-
-        self.project_ids = project_ids
-        self.max_workers_per_project = max_workers_per_project
-        self.scalers = {
-            project_id: WorkerScaler(max_workers=max_workers_per_project)
-            for project_id in project_ids
-        }
-        self.active_counts = {project_id: 0 for project_id in project_ids}
-        self.index = 0
-
-    @property
-    def max_worker_count(self) -> int:
-        # ---------------------------------------------------------
-        # Return total maximum workers across all configured projects.
-        # ---------------------------------------------------------
-        return len(self.project_ids) * self.max_workers_per_project
-
-    @property
-    def worker_count(self) -> int:
-        # ---------------------------------------------------------
-        # Return total current AIMD workers across all projects.
-        # ---------------------------------------------------------
-        return sum(scaler.worker_count for scaler in self.scalers.values())
-
-    def borrow_project_id(self) -> str | None:
-        # ---------------------------------------------------------
-        # Borrow one slot from the least busy available project.
-        # ---------------------------------------------------------
-        selected_project_id: str | None = None
-
-        for step in range(len(self.project_ids)):
-            project_index = (self.index + step) % len(self.project_ids)
-            project_id = self.project_ids[project_index]
-            active_count = self.active_counts[project_id]
-
-            if active_count >= self.scalers[project_id].worker_count:
-                continue
-
-            if selected_project_id is None:
-                selected_project_id = project_id
-                continue
-
-            if active_count < self.active_counts[selected_project_id]:
-                selected_project_id = project_id
-
-        if selected_project_id is None:
-            return None
-
-        self.active_counts[selected_project_id] += 1
-        selected_index = self.project_ids.index(selected_project_id)
-        self.index = (selected_index + 1) % len(self.project_ids)
-
-        return selected_project_id
-
-    def return_project_id(self, project_id: str) -> None:
-        # ---------------------------------------------------------
-        # Return one active project worker slot after job completion.
-        # ---------------------------------------------------------
-        self.active_counts[project_id] -= 1
-
-    def record_success(self, project_id: str) -> None:
-        # ---------------------------------------------------------
-        # Scale only the project that handled the successful request.
-        # ---------------------------------------------------------
-        self.scalers[project_id].record_success()
-
-    def record_error(self, project_id: str, error: Exception) -> None:
-        # ---------------------------------------------------------
-        # Scale only the project that handled the failed request.
-        # ---------------------------------------------------------
-        self.scalers[project_id].record_error(error)
-
-
-def is_request_failure_error(error: Exception) -> bool:
-    # ---------------------------------------------------------
-    # Detect request failures that should reduce API pressure.
-    # ---------------------------------------------------------
-    status_code = getattr(error, "status_code", None)
-
-    if status_code in {429, 500, 502, 503, 504}:
-        return True
-
-    error_text = str(error).lower()
-    failure_words = ("429", "timeout", "timed out", "connection", "rate limit")
-
-    return any(word in error_text for word in failure_words)
 
 
 def run_rewrite_jobs(

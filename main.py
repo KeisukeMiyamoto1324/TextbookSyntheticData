@@ -1,15 +1,12 @@
 import argparse
 from collections.abc import Callable
-from datetime import datetime, timedelta
 from pathlib import Path
 
-from rich.console import Console, RenderableType
+from rich.console import Console
 from rich.markup import escape
 from rich.progress import (
     BarColumn,
     Progress,
-    ProgressColumn,
-    Task,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
@@ -24,6 +21,7 @@ from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
 from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_resume_state
+from src.progress_display import EstimatedFinishColumn
 from src.project_router import project_router
 from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
 
@@ -34,25 +32,6 @@ PROMPT_BUILDERS: tuple[tuple[str, Callable[[str], str]], ...] = (
     ("junior-high-school", build_medium_rewrite_prompt),
     ("elementary-school", build_easy_rewrite_prompt),
 )
-
-
-class EstimatedFinishColumn(ProgressColumn):
-    # ---------------------------------------------------------
-    # Show the estimated local finish time from remaining seconds.
-    # ---------------------------------------------------------
-    def render(self, task: Task) -> RenderableType:
-        if task.finished:
-            return "ETA done"
-
-        if task.time_remaining is None:
-            return "ETA calculating"
-
-        finish_time = datetime.now() + timedelta(seconds=task.time_remaining)
-
-        if finish_time.date() == datetime.now().date():
-            return f"ETA {finish_time:%H:%M:%S}"
-
-        return f"ETA {finish_time:%Y-%m-%d %H:%M:%S}"
 
 
 def parse_args() -> argparse.Namespace:
