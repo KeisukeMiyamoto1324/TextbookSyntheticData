@@ -1,3 +1,4 @@
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Self
 
@@ -27,8 +28,10 @@ class RewriteRecord:
         response: GemmaResponse,
     ) -> Self:
         # ---------------------------------------------------------
-        # Build a serializable record for one generated rewrite.
+        # Normalize generated text for stable training data.
         # ---------------------------------------------------------
+        rewrite = unicodedata.normalize("NFKC", response.text)
+
         return cls(
             offset=offset,
             source_id=str(item["id"]),
@@ -36,7 +39,7 @@ class RewriteRecord:
             source_text=text,
             prompt_type=prompt_type,
             prompt=prompt,
-            rewrite=response.text,
-            output_chars=len(response.text),
+            rewrite=rewrite,
+            output_chars=len(rewrite),
             output_tokens=response.output_tokens,
         )
