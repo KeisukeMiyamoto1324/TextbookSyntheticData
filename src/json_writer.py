@@ -1,5 +1,5 @@
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
@@ -7,6 +7,12 @@ from types import TracebackType
 from typing import Self
 
 from src.rewrite_record import RewriteRecord
+
+
+@dataclass(frozen=True)
+class JsonlResumeState:
+    max_offset: int
+    record_count: int
 
 
 def build_results_jsonl_path(output_dir: Path) -> Path:
@@ -18,11 +24,12 @@ def build_results_jsonl_path(output_dir: Path) -> Path:
     return output_dir / f"rewrites_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
 
-def read_max_offset(jsonl_path: Path) -> int:
+def read_resume_state(jsonl_path: Path) -> JsonlResumeState:
     # ---------------------------------------------------------
-    # Read a JSONL file and return its largest saved offset.
+    # Read a JSONL file and return saved record count and offset.
     # ---------------------------------------------------------
     max_offset: int | None = None
+    record_count = 0
 
     with jsonl_path.open("r", encoding="utf-8") as file:
         for line_number, line in enumerate(file, start=1):
@@ -43,10 +50,22 @@ def read_max_offset(jsonl_path: Path) -> int:
             if max_offset is None or offset > max_offset:
                 max_offset = offset
 
+            record_count += 1
+
     if max_offset is None:
         raise ValueError("resume JSONL does not contain records")
 
-    return max_offset
+    return JsonlResumeState(
+        max_offset=max_offset,
+        record_count=record_count,
+    )
+
+
+def read_max_offset(jsonl_path: Path) -> int:
+    # ---------------------------------------------------------
+    # Read a JSONL file and return its largest saved offset.
+    # ---------------------------------------------------------
+    return read_resume_state(jsonl_path).max_offset
 
 
 class JsonlRecordWriter:

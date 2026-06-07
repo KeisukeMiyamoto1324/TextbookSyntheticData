@@ -23,7 +23,7 @@ from src.build_prompt import (
 from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
-from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_max_offset
+from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_resume_state
 from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
 
 
@@ -79,8 +79,10 @@ def main() -> None:
         if resume_mode
         else build_results_jsonl_path(args.output_dir)
     )
-    start_offset = read_max_offset(output_path) + 1 if resume_mode else args.offset
-    target_count = max(0, args.count - start_offset) if resume_mode else args.count
+    resume_state = read_resume_state(output_path) if resume_mode else None
+    start_offset = resume_state.max_offset + 1 if resume_state is not None else args.offset
+    existing_count = resume_state.record_count if resume_state is not None else 0
+    target_count = max(0, args.count - existing_count)
     row_iterator = iter_rows(
         config=args.config,
         split=args.split,
@@ -111,9 +113,6 @@ def main() -> None:
         try:
             offset, item = next(row_iterator)
         except StopIteration:
-            return None
-
-        if resume_mode and offset >= args.count:
             return None
 
         text = str(item["text"])

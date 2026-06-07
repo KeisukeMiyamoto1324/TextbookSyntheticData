@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_max_offset
+from src.json_writer import (
+    JsonlRecordWriter,
+    build_results_jsonl_path,
+    read_max_offset,
+    read_resume_state,
+)
 from src.rewrite_record import RewriteRecord
 
 
@@ -62,6 +67,29 @@ def test_read_max_offset_reads_largest_offset_from_unordered_jsonl(tmp_path: Pat
     )
 
     assert read_max_offset(output_path) == 13
+
+
+def test_read_resume_state_reads_count_and_largest_offset(tmp_path: Path) -> None:
+    # ---------------------------------------------------------
+    # Verify that resume uses saved count and largest offset.
+    # ---------------------------------------------------------
+    output_path = tmp_path / "rewrites.jsonl"
+    output_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"offset": 7}),
+                json.dumps({"offset": 1}),
+                json.dumps({"offset": 13}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    state = read_resume_state(output_path)
+
+    assert state.max_offset == 13
+    assert state.record_count == 3
 
 
 def test_read_max_offset_rejects_broken_jsonl(tmp_path: Path) -> None:
