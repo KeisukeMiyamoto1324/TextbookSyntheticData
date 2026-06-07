@@ -29,6 +29,29 @@ class FakeCompletions:
         )
 
 
+class FakeStringResponseCompletions:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def create(self, **kwargs: object) -> object:
+        # ---------------------------------------------------------
+        # Return malformed string responses before a valid response.
+        # ---------------------------------------------------------
+        self.call_count += 1
+
+        if self.call_count <= 3:
+            return "upstream connect error"
+
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="rewrite"),
+                ),
+            ],
+            usage=SimpleNamespace(completion_tokens=12),
+        )
+
+
 class FakeClient:
     def __init__(self, completions: FakeCompletions) -> None:
         self.chat = SimpleNamespace(
@@ -89,10 +112,39 @@ def test_ask_gemma4_keeps_project_id_on_retry(
     assert limiter.enter_count == 2
 
 
-def test_vertex_retryable_error_detection() -> None:
+def test_ask_gemma4_retries_string_errors_with_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # ---------------------------------------------------------
-    # Verify that temporary Vertex status errors are retried.
+    # Verify malformed string errors wait 1, 4, and 16 seconds.
+    # ---------------------------------------------------------
+    sleep_seconds: list[int] = []
+    completions = FakeStringResponseCompletions()
+    limiter = FakeLimiter()
+
+    def fake_create_client(project_id: str) -> FakeClient:
+        return FakeClient(completions)
+
+    monkeypatch.setattr(vertex_client, "project_router", ProjectRouter(["project-0"]))
+    monkeypatch.setattr(vertex_client, "create_client", fake_create_client)
+    monkeypatch.setattr(vertex_client, "REQUEST_LIMITER", limiter)
+    monkeypatch.setattr("src.retry.time.sleep", sleep_seconds.append)
+
+    response = vertex_client.ask_gemma4(
+        prompt="prompt",
+        system_prompt="system",
+    )
+
+    assert response.text == "rewrite"
+    assert sleep_seconds == [1, 4, 16]
+    assert limiter.enter_count == 4
+
+
+def test_vertex_retries_every_generation_error() -> None:
+    # ---------------------------------------------------------
+    # Verify that every Vertex generation error is retried.
     # ---------------------------------------------------------
     assert vertex_client.is_retryable_error(FakeStatusError(429))
     assert vertex_client.is_retryable_error(FakeStatusError(503))
-    assert not vertex_client.is_retryable_error(FakeStatusError(404))
+    assert vertex_client.is_retryable_error(FakeStatusError(404))
+    assert vertex_client.is_retryable_error(ValueError("upstream connect error"))

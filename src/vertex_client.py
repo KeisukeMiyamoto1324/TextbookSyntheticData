@@ -13,7 +13,6 @@ from src.vertex_auth import create_client
 REQUEST_LIMIT_PER_MINUTE: int = 60
 SECONDS_PER_MINUTE: int = 60
 EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
-RETRYABLE_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
 REQUEST_LIMITER = Limiter(
     rate=REQUEST_LIMIT_PER_MINUTE / SECONDS_PER_MINUTE,
     capacity=REQUEST_LIMIT_PER_MINUTE,
@@ -32,20 +31,9 @@ class EmptyChoicesError(Exception):
 
 def is_retryable_error(error: Exception) -> bool:
     # ---------------------------------------------------------
-    # Detect retryable Vertex AI and malformed response errors.
+    # Retry every Vertex generation failure before skipping a row.
     # ---------------------------------------------------------
-    if isinstance(error, (openai.APIConnectionError, openai.APITimeoutError)):
-        return True
-
-    if isinstance(error, EmptyChoicesError):
-        return True
-
-    status_code = getattr(error, "status_code", None)
-
-    if status_code in RETRYABLE_STATUS_CODES:
-        return True
-
-    return "429" in str(error)
+    return True
 
 
 def ask_gemma4(
