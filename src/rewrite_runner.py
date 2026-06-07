@@ -29,6 +29,7 @@ class RewriteSuccess:
     index: int
     job: RewriteJob
     record: RewriteRecord
+    current_workers: int = 1
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class RewriteFailure:
     index: int
     offset: int
     message: str
+    current_workers: int = 1
 
 
 RewriteResult = RewriteSuccess | RewriteFailure
@@ -187,6 +189,7 @@ def iter_rewrite_job_queue(
                         index=job.index,
                         offset=job.offset,
                         message=str(error),
+                        current_workers=scaler.worker_count,
                     )
                 else:
                     scaler.record_success()
@@ -194,6 +197,7 @@ def iter_rewrite_job_queue(
                         index=job.index,
                         job=job,
                         record=record,
+                        current_workers=scaler.worker_count,
                     )
 
             submit_available_jobs()

@@ -135,6 +135,7 @@ def main() -> None:
             TextColumn("[bold]Generating[/bold]"),
             BarColumn(),
             TextColumn("{task.completed}/{task.total} texts"),
+            TextColumn("Workers {task.fields[current_workers]}/{task.fields[max_workers]}"),
             TimeRemainingColumn(),
             TimeElapsedColumn(),
             EstimatedFinishColumn(),
@@ -142,13 +143,24 @@ def main() -> None:
         )
 
         with progress:
-            task_id = progress.add_task("Generating", total=target_count)
+            task_id = progress.add_task(
+                "Generating",
+                total=target_count,
+                current_workers=1,
+                max_workers=args.workers,
+            )
 
             for result in iter_rewrite_job_queue(
                 get_next_job=get_next_job,
                 workers=args.workers,
                 system_prompt=SYSTEM_PROMPT,
             ):
+                progress.update(
+                    task_id,
+                    current_workers=result.current_workers,
+                    max_workers=args.workers,
+                )
+
                 if isinstance(result, RewriteFailure):
                     print_skip(console, result.message, result.offset)
                     continue
