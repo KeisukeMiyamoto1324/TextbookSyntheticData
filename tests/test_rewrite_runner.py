@@ -177,7 +177,7 @@ def test_worker_scaler_increases_after_success_streak() -> None:
     # ---------------------------------------------------------
     scaler = WorkerScaler(max_workers=3)
 
-    for _ in range(10):
+    for _ in range(3):
         scaler.record_success()
 
     assert scaler.current_workers == 2
@@ -189,7 +189,7 @@ def test_worker_scaler_does_not_exceed_max_workers() -> None:
     # ---------------------------------------------------------
     scaler = WorkerScaler(max_workers=2)
 
-    for _ in range(30):
+    for _ in range(9):
         scaler.record_success()
 
     assert scaler.current_workers == 2
@@ -201,7 +201,7 @@ def test_worker_scaler_reduces_twenty_percent_on_request_failure() -> None:
     # ---------------------------------------------------------
     scaler = WorkerScaler(max_workers=10)
 
-    for _ in range(40):
+    for _ in range(12):
         scaler.record_success()
 
     scaler.record_error(RuntimeError("429 rate limit"))
@@ -220,7 +220,7 @@ def test_worker_scaler_reduces_twenty_percent_on_temporary_server_error() -> Non
 
     scaler = WorkerScaler(max_workers=10)
 
-    for _ in range(30):
+    for _ in range(9):
         scaler.record_success()
 
     scaler.record_error(FakeStatusError(503))

@@ -42,7 +42,7 @@ class RewriteFailure:
 
 RewriteResult = RewriteSuccess | RewriteFailure
 GetNextJob = Callable[[int], RewriteJob | None]
-SUCCESS_SCALE_STEP: int = 10
+SUCCESS_SCALE_STEP: int = 3
 REQUEST_FAILURE_SCALE_FACTOR: float = 0.8
 
 
