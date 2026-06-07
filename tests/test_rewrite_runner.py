@@ -6,6 +6,7 @@ from src.rewrite_runner import (
     RewriteFailure,
     RewriteJob,
     RewriteSuccess,
+    WorkerScaler,
     iter_rewrite_job_queue,
     run_rewrite_jobs,
 )
@@ -33,7 +34,11 @@ def test_run_rewrite_jobs_with_one_worker(monkeypatch: pytest.MonkeyPatch) -> No
     # ---------------------------------------------------------
     # Verify that the runner creates records with one worker.
     # ---------------------------------------------------------
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         return GemmaResponse(text=f"rewrite for {prompt}", output_tokens=10)
 
     monkeypatch.setattr("src.rewrite_runner.ask_gemma4", fake_ask_gemma4)
@@ -53,7 +58,11 @@ def test_run_rewrite_jobs_with_multiple_workers(monkeypatch: pytest.MonkeyPatch)
     # ---------------------------------------------------------
     # Verify that multiple jobs can be processed by threads.
     # ---------------------------------------------------------
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         return GemmaResponse(text=f"rewrite for {prompt}", output_tokens=10)
 
     monkeypatch.setattr("src.rewrite_runner.ask_gemma4", fake_ask_gemma4)
@@ -74,7 +83,11 @@ def test_run_rewrite_jobs_keeps_successes_when_one_job_fails(
     # ---------------------------------------------------------
     # Verify that one failed job does not remove successful jobs.
     # ---------------------------------------------------------
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         if prompt == "prompt-1":
             raise RuntimeError("failed")
 
@@ -100,7 +113,11 @@ def test_run_rewrite_jobs_returns_input_order_after_out_of_order_completion(
     # ---------------------------------------------------------
     # Verify that slow earlier jobs still appear first in results.
     # ---------------------------------------------------------
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         if prompt == "prompt-0":
             time.sleep(0.02)
 
@@ -117,11 +134,11 @@ def test_run_rewrite_jobs_returns_input_order_after_out_of_order_completion(
     assert [result.index for result in results] == [0, 1, 2]
 
 
-def test_iter_rewrite_job_queue_refills_worker_after_one_job_finishes(
+def test_iter_rewrite_job_queue_starts_with_one_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # ---------------------------------------------------------
-    # Verify that a finished worker receives the next job immediately.
+    # Verify that AIMD starts safely with one active worker.
     # ---------------------------------------------------------
     jobs = iter([build_job(0), build_job(1), build_job(2)])
 
@@ -131,7 +148,11 @@ def test_iter_rewrite_job_queue_refills_worker_after_one_job_finishes(
         except StopIteration:
             return None
 
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         if prompt == "prompt-0":
             time.sleep(0.05)
 
@@ -147,4 +168,61 @@ def test_iter_rewrite_job_queue_refills_worker_after_one_job_finishes(
         )
     )
 
-    assert [result.index for result in results] == [1, 2, 0]
+    assert [result.index for result in results] == [0, 1, 2]
+
+
+def test_worker_scaler_increases_after_success_streak() -> None:
+    # ---------------------------------------------------------
+    # Verify that AIMD increases concurrency after stable success.
+    # ---------------------------------------------------------
+    scaler = WorkerScaler(max_workers=3)
+
+    for _ in range(10):
+        scaler.record_success()
+
+    assert scaler.current_workers == 2
+
+
+def test_worker_scaler_does_not_exceed_max_workers() -> None:
+    # ---------------------------------------------------------
+    # Verify that AIMD respects the configured worker ceiling.
+    # ---------------------------------------------------------
+    scaler = WorkerScaler(max_workers=2)
+
+    for _ in range(30):
+        scaler.record_success()
+
+    assert scaler.current_workers == 2
+
+
+def test_worker_scaler_reduces_twenty_percent_on_rate_limit_error() -> None:
+    # ---------------------------------------------------------
+    # Verify that rate limit errors reduce concurrency by twenty percent.
+    # ---------------------------------------------------------
+    scaler = WorkerScaler(max_workers=10)
+
+    for _ in range(40):
+        scaler.record_success()
+
+    scaler.record_error(RuntimeError("429 rate limit"))
+
+    assert scaler.current_workers == 4
+
+
+def test_worker_scaler_reduces_on_temporary_server_error() -> None:
+    # ---------------------------------------------------------
+    # Verify that temporary server errors reduce concurrency by one.
+    # ---------------------------------------------------------
+    class FakeStatusError(Exception):
+        def __init__(self, status_code: int) -> None:
+            super().__init__(f"status {status_code}")
+            self.status_code = status_code
+
+    scaler = WorkerScaler(max_workers=10)
+
+    for _ in range(30):
+        scaler.record_success()
+
+    scaler.record_error(FakeStatusError(503))
+
+    assert scaler.current_workers == 3

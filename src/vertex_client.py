@@ -1,10 +1,12 @@
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import openai
 from google.auth import default
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
+from limiter import Limiter
 
 from src.config import ENABLE_THINKING, LOCATION, MODEL
 from src.project_router import project_router
@@ -14,6 +16,7 @@ from src.retry import run_with_backoff
 REQUEST_INTERVAL_SECONDS: float = 1.0
 EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
 RETRYABLE_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
+REQUEST_LIMITER = Limiter(rate=1, capacity=1)
 
 
 @dataclass(frozen=True)
@@ -64,7 +67,11 @@ def is_retryable_error(error: Exception) -> bool:
     return "429" in str(error)
 
 
-def ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+def ask_gemma4(
+    prompt: str,
+    system_prompt: str,
+    on_retry: Callable[[Exception], None] | None = None,
+) -> GemmaResponse:
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
@@ -73,18 +80,19 @@ def ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
         client = create_client(project_id)
         time.sleep(REQUEST_INTERVAL_SECONDS)
 
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            extra_body={
-                "chat_template_kwargs": {
-                    "enable_thinking": ENABLE_THINKING,
+        with REQUEST_LIMITER:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                extra_body={
+                    "chat_template_kwargs": {
+                        "enable_thinking": ENABLE_THINKING,
+                    },
                 },
-            },
-        )
+            )
 
         if isinstance(response, str):
             raise ValueError(response)
@@ -94,7 +102,7 @@ def ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
 
         return response
 
-    response = run_with_backoff(request_completion, is_retryable_error)
+    response = run_with_backoff(request_completion, is_retryable_error, on_retry)
 
     if isinstance(response, str):
         raise ValueError(response)

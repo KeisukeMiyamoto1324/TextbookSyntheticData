@@ -1,5 +1,6 @@
 datasets
 google-auth
+limiter
 openai
 python-dotenv
 pytest

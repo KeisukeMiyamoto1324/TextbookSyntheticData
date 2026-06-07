@@ -53,7 +53,11 @@ def test_main_resumes_jsonl_until_target_saved_count(
                 "text": f"text-{offset}",
             }
 
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         return GemmaResponse(text="rewrite", output_tokens=3)
 
     monkeypatch.setattr(app, "parse_args", fake_parse_args)
@@ -136,7 +140,11 @@ def test_main_does_not_count_failed_jobs(
                 "text": f"text-{offset}",
             }
 
-    def fake_ask_gemma4(prompt: str, system_prompt: str) -> GemmaResponse:
+    def fake_ask_gemma4(
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+    ) -> GemmaResponse:
         if "text-1" in prompt:
             raise RuntimeError("failed")
 

@@ -6,9 +6,14 @@ from typing import TypeVar
 MAX_RETRY_COUNT: int = 5
 
 T = TypeVar("T")
+RetryCallback = Callable[[Exception], None]
 
 
-def run_with_backoff(operation: Callable[[], T], should_retry: Callable[[Exception], bool]) -> T:
+def run_with_backoff(
+    operation: Callable[[], T],
+    should_retry: Callable[[Exception], bool],
+    on_retry: RetryCallback | None = None,
+) -> T:
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
@@ -18,6 +23,9 @@ def run_with_backoff(operation: Callable[[], T], should_retry: Callable[[Excepti
         except Exception as error:
             if not should_retry(error) or retry_count >= MAX_RETRY_COUNT:
                 raise
+
+            if on_retry is not None:
+                on_retry(error)
 
             time.sleep(2**retry_count)
 
