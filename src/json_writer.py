@@ -1,6 +1,7 @@
 import json
 from dataclasses import asdict
 from datetime import datetime
+from json import JSONDecodeError
 from pathlib import Path
 from types import TracebackType
 from typing import Self
@@ -17,10 +18,52 @@ def build_results_jsonl_path(output_dir: Path) -> Path:
     return output_dir / f"rewrites_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
 
+def read_max_offset(jsonl_path: Path) -> int:
+    # ---------------------------------------------------------
+    # Read a JSONL file and return its largest saved offset.
+    # ---------------------------------------------------------
+    max_offset: int | None = None
+
+    with jsonl_path.open("r", encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            try:
+                record = json.loads(line)
+            except JSONDecodeError as error:
+                message = f"invalid JSON at line {line_number}: {error.msg}"
+                raise ValueError(message) from error
+
+            if not isinstance(record, dict):
+                raise ValueError(f"line {line_number} is not a JSON object")
+
+            if "offset" not in record:
+                raise ValueError(f"line {line_number} does not contain offset")
+
+            offset = int(record["offset"])
+
+            if max_offset is None or offset > max_offset:
+                max_offset = offset
+
+    if max_offset is None:
+        raise ValueError("resume JSONL does not contain records")
+
+    return max_offset
+
+
 class JsonlRecordWriter:
-    def __init__(self, output_path: Path) -> None:
+    def __init__(self, output_path: Path, append: bool = False) -> None:
         self.output_path = output_path
-        self.file = output_path.open("w", encoding="utf-8")
+        needs_leading_newline = False
+
+        if append and output_path.stat().st_size > 0:
+            with output_path.open("rb") as file:
+                file.seek(-1, 2)
+                needs_leading_newline = file.read(1) != b"\n"
+
+        mode = "a" if append else "w"
+        self.file = output_path.open(mode, encoding="utf-8")
+
+        if needs_leading_newline:
+            self.file.write("\n")
 
     def __enter__(self) -> Self:
         return self

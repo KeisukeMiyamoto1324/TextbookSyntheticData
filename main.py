@@ -23,7 +23,7 @@ from src.build_prompt import (
 from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
-from src.json_writer import JsonlRecordWriter, build_results_jsonl_path
+from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_max_offset
 from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
 
 
@@ -64,6 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=str, default="default")
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--resume-jsonl", type=Path, default=None)
     parser.add_argument("--workers", type=positive_int, default=10)
 
     return parser.parse_args()
@@ -72,32 +73,47 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     console = Console()
-    output_path = build_results_jsonl_path(args.output_dir)
+    resume_mode = args.resume_jsonl is not None
+    output_path = (
+        args.resume_jsonl
+        if resume_mode
+        else build_results_jsonl_path(args.output_dir)
+    )
+    start_offset = read_max_offset(output_path) + 1 if resume_mode else args.offset
+    target_count = max(0, args.count - start_offset) if resume_mode else args.count
     row_iterator = iter_rows(
         config=args.config,
         split=args.split,
-        start_offset=args.offset,
+        start_offset=start_offset,
     )
     written_count = 0
-    job_index = 0
+    job_index = start_offset if resume_mode else 0
 
     # ---------------------------------------------------------
     # Rewrite rows continuously and refill workers as they finish.
     # ---------------------------------------------------------
     console.rule(
-        f"[bold]Start rewriting {args.count} texts from offset {args.offset} "
+        f"[bold]Start rewriting {target_count} texts from offset {start_offset} "
         f"with {args.workers} workers[/bold]"
     )
+
+    if target_count <= 0:
+        console.print(f"Saved JSONL: {escape(str(output_path))}")
+        console.rule("[bold]Done[/bold]")
+        return
 
     def get_next_job(active_count: int) -> RewriteJob | None:
         nonlocal job_index
 
-        if written_count + active_count >= args.count:
+        if written_count + active_count >= target_count:
             return None
 
         try:
             offset, item = next(row_iterator)
         except StopIteration:
+            return None
+
+        if resume_mode and offset >= args.count:
             return None
 
         text = str(item["text"])
@@ -115,7 +131,7 @@ def main() -> None:
 
         return job
 
-    with JsonlRecordWriter(output_path) as writer:
+    with JsonlRecordWriter(output_path, append=resume_mode) as writer:
         progress = Progress(
             TextColumn("[bold]Generating[/bold]"),
             BarColumn(),
@@ -127,7 +143,7 @@ def main() -> None:
         )
 
         with progress:
-            task_id = progress.add_task("Generating", total=args.count)
+            task_id = progress.add_task("Generating", total=target_count)
 
             for result in iter_rewrite_job_queue(
                 get_next_job=get_next_job,
