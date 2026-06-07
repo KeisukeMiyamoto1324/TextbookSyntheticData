@@ -21,4 +21,3 @@
 ## Other
 - Please respond in Japanese.
 - ALWAYS make your answer SHORT and CONCISE. Answer for what the user is asking ONLY.
-- Try to avoid using list if it is possible. You may use table instead. 
