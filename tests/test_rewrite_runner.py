@@ -197,12 +197,15 @@ def test_worker_scaler_does_not_exceed_max_workers() -> None:
 
 def test_worker_scaler_reduces_twenty_percent_on_request_failure() -> None:
     # ---------------------------------------------------------
-    # Verify that request failures reduce concurrency by twenty percent.
+    # Verify that two request failures reduce concurrency by twenty percent.
     # ---------------------------------------------------------
     scaler = WorkerScaler(max_workers=10)
 
     for _ in range(12):
         scaler.record_success()
+
+    scaler.record_error(RuntimeError("429 rate limit"))
+    assert scaler.current_workers == 5
 
     scaler.record_error(RuntimeError("429 rate limit"))
 
@@ -211,7 +214,7 @@ def test_worker_scaler_reduces_twenty_percent_on_request_failure() -> None:
 
 def test_worker_scaler_reduces_twenty_percent_on_temporary_server_error() -> None:
     # ---------------------------------------------------------
-    # Verify that temporary server errors use the same failure rule.
+    # Verify that temporary server errors use the same two-failure rule.
     # ---------------------------------------------------------
     class FakeStatusError(Exception):
         def __init__(self, status_code: int) -> None:
@@ -224,5 +227,24 @@ def test_worker_scaler_reduces_twenty_percent_on_temporary_server_error() -> Non
         scaler.record_success()
 
     scaler.record_error(FakeStatusError(503))
+    assert scaler.current_workers == 4
+
+    scaler.record_error(FakeStatusError(503))
 
     assert scaler.current_workers == 3
+
+
+def test_worker_scaler_success_resets_failure_streak() -> None:
+    # ---------------------------------------------------------
+    # Verify that failures must be consecutive to reduce workers.
+    # ---------------------------------------------------------
+    scaler = WorkerScaler(max_workers=10)
+
+    for _ in range(12):
+        scaler.record_success()
+
+    scaler.record_error(RuntimeError("timeout"))
+    scaler.record_success()
+    scaler.record_error(RuntimeError("timeout"))
+
+    assert scaler.current_workers == 5

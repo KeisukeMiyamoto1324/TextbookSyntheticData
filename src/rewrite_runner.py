@@ -43,6 +43,7 @@ class RewriteFailure:
 RewriteResult = RewriteSuccess | RewriteFailure
 GetNextJob = Callable[[int], RewriteJob | None]
 SUCCESS_SCALE_STEP: int = 3
+FAILURE_SCALE_STEP: int = 2
 REQUEST_FAILURE_SCALE_FACTOR: float = 0.8
 
 
@@ -51,6 +52,7 @@ class WorkerScaler:
         self.max_workers = max_workers
         self.current_workers = 1
         self.success_streak = 0
+        self.failure_streak = 0
         self.lock = Lock()
 
     @property
@@ -67,6 +69,7 @@ class WorkerScaler:
         # ---------------------------------------------------------
         with self.lock:
             self.success_streak += 1
+            self.failure_streak = 0
 
             if self.success_streak < SUCCESS_SCALE_STEP:
                 return
@@ -81,11 +84,20 @@ class WorkerScaler:
         with self.lock:
             self.success_streak = 0
 
-            if is_request_failure_error(error):
-                self.current_workers = max(
-                    1,
-                    int(self.current_workers * REQUEST_FAILURE_SCALE_FACTOR),
-                )
+            if not is_request_failure_error(error):
+                self.failure_streak = 0
+                return
+
+            self.failure_streak += 1
+
+            if self.failure_streak < FAILURE_SCALE_STEP:
+                return
+
+            self.current_workers = max(
+                1,
+                int(self.current_workers * REQUEST_FAILURE_SCALE_FACTOR),
+            )
+            self.failure_streak = 0
 
 
 def is_request_failure_error(error: Exception) -> bool:
