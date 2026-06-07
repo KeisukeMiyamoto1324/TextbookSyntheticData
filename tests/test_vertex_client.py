@@ -56,11 +56,11 @@ class FakeLimiter:
         pass
 
 
-def test_ask_gemma4_switches_project_id_on_retry(
+def test_ask_gemma4_keeps_project_id_on_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # ---------------------------------------------------------
-    # Verify that retryable errors use the next project ID.
+    # Verify that retryable errors keep the same project ID.
     # ---------------------------------------------------------
     used_project_ids: list[str] = []
     completions = FakeCompletions()
@@ -85,7 +85,7 @@ def test_ask_gemma4_switches_project_id_on_retry(
 
     assert response.text == "rewrite"
     assert response.output_tokens == 12
-    assert used_project_ids == ["project-0", "project-1"]
+    assert used_project_ids == ["project-0", "project-0"]
     assert len(retry_errors) == 1
     assert limiter.enter_count == 2
 

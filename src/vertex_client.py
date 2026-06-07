@@ -75,8 +75,9 @@ def ask_gemma4(
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
+    project_id = project_router.next_project_id()
+
     def request_completion() -> openai.types.chat.ChatCompletion:
-        project_id = project_router.next_project_id()
         client = create_client(project_id)
         time.sleep(REQUEST_INTERVAL_SECONDS)
 
