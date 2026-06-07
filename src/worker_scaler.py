@@ -1,9 +1,9 @@
 from threading import Lock
 
 
-SUCCESS_SCALE_STEP: int = 3
+SUCCESS_SCALE_STEP: int = 2
 FAILURE_SCALE_STEP: int = 2
-REQUEST_FAILURE_SCALE_FACTOR: float = 0.8
+REQUEST_FAILURE_SCALE_FACTOR: float = 0.75
 
 
 class WorkerScaler:

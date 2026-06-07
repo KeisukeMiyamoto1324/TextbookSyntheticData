@@ -3,7 +3,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 
-MAX_RETRY_COUNT: int = 5
+MAX_RETRY_COUNT: int = 3
 
 T = TypeVar("T")
 RetryCallback = Callable[[Exception], None]
@@ -27,6 +27,6 @@ def run_with_backoff(
             if on_retry is not None:
                 on_retry(error)
 
-            time.sleep(2**retry_count)
+            time.sleep(4**retry_count)
 
     raise RuntimeError("retry loop ended unexpectedly")

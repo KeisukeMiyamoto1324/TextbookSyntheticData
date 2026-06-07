@@ -10,7 +10,7 @@ from src.retry import run_with_backoff
 from src.vertex_auth import create_client
 
 
-REQUEST_LIMIT_PER_MINUTE: int = 120
+REQUEST_LIMIT_PER_MINUTE: int = 60
 SECONDS_PER_MINUTE: int = 60
 EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
 RETRYABLE_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
