@@ -36,6 +36,12 @@ class FakeClient:
         )
 
 
+class FakeStatusError(Exception):
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"status {status_code}")
+        self.status_code = status_code
+
+
 def test_ask_gemma4_switches_project_id_on_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -59,3 +65,12 @@ def test_ask_gemma4_switches_project_id_on_retry(
     assert response.text == "rewrite"
     assert response.output_tokens == 12
     assert used_project_ids == ["project-0", "project-1"]
+
+
+def test_vertex_retryable_error_detection() -> None:
+    # ---------------------------------------------------------
+    # Verify that temporary Vertex status errors are retried.
+    # ---------------------------------------------------------
+    assert vertex_client.is_retryable_error(FakeStatusError(429))
+    assert vertex_client.is_retryable_error(FakeStatusError(503))
+    assert not vertex_client.is_retryable_error(FakeStatusError(404))

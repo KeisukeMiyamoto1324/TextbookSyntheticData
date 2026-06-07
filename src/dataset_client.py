@@ -2,7 +2,7 @@ import json
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlencode
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from src.retry import run_with_backoff
@@ -11,13 +11,21 @@ from src.retry import run_with_backoff
 DATASET_NAME: str = "hotchpotch/fineweb-2-edu-japanese"
 DATASET_ROWS_URL: str = "https://datasets-server.huggingface.co/rows"
 BATCH_SIZE: int = 100
+REQUEST_TIMEOUT_SECONDS: int = 60
+RETRYABLE_HTTP_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
 
 
-def is_rate_limit_error(error: Exception) -> bool:
+def is_dataset_retryable_error(error: Exception) -> bool:
     # ---------------------------------------------------------
-    # Detect Hugging Face Dataset Viewer rate limit errors.
+    # Detect temporary Hugging Face Dataset Viewer errors.
     # ---------------------------------------------------------
-    return isinstance(error, HTTPError) and error.code == 429
+    if isinstance(error, HTTPError):
+        return error.code in RETRYABLE_HTTP_STATUS_CODES
+
+    if isinstance(error, (TimeoutError, URLError)):
+        return True
+
+    return False
 
 
 def fetch_rows(config: str, split: str, offset: int, length: int) -> list[dict[str, Any]]:
@@ -35,12 +43,15 @@ def fetch_rows(config: str, split: str, offset: int, length: int) -> list[dict[s
     )
 
     def request_rows() -> list[dict[str, Any]]:
-        with urlopen(f"{DATASET_ROWS_URL}?{query}") as response:
+        with urlopen(
+            f"{DATASET_ROWS_URL}?{query}",
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        ) as response:
             data = json.loads(response.read().decode("utf-8"))
 
         return list(data["rows"])
 
-    return run_with_backoff(request_rows, is_rate_limit_error)
+    return run_with_backoff(request_rows, is_dataset_retryable_error)
 
 
 def iter_rows(

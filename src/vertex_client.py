@@ -13,6 +13,7 @@ from src.retry import run_with_backoff
 
 REQUEST_INTERVAL_SECONDS: float = 1.0
 EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
+RETRYABLE_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -49,10 +50,15 @@ def is_retryable_error(error: Exception) -> bool:
     # ---------------------------------------------------------
     # Detect retryable Vertex AI and malformed response errors.
     # ---------------------------------------------------------
-    if isinstance(error, openai.RateLimitError):
+    if isinstance(error, (openai.APIConnectionError, openai.APITimeoutError)):
         return True
 
     if isinstance(error, EmptyChoicesError):
+        return True
+
+    status_code = getattr(error, "status_code", None)
+
+    if status_code in RETRYABLE_STATUS_CODES:
         return True
 
     return "429" in str(error)

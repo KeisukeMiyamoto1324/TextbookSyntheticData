@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from rich.console import Console, RenderableType
+from rich.markup import escape
 from rich.progress import (
     BarColumn,
     Progress,
@@ -156,7 +157,7 @@ def main() -> None:
     # ---------------------------------------------------------
     # Finish terminal output after all saved records are flushed.
     # ---------------------------------------------------------
-    console.print(f"Saved JSONL: {output_path}")
+    console.print(f"Saved JSONL: {escape(str(output_path))}")
     console.rule("[bold]Done[/bold]")
 
 
