@@ -1,6 +1,7 @@
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -23,11 +24,11 @@ def build_result_table(
     table.add_column("Field", style="bold cyan", no_wrap=True)
     table.add_column("Value", overflow="fold", ratio=1)
     table.add_row("Offset", str(offset))
-    table.add_row("ID", str(item["id"]))
-    table.add_row("URL", str(item["url"]))
-    table.add_row("Prompt Type", prompt_type)
-    table.add_row("Text", text[:TEXT_PREVIEW_LENGTH].replace("\n", " "))
-    table.add_row("Rewrite", rewrite.strip())
+    table.add_row("ID", escape(str(item["id"])))
+    table.add_row("URL", escape(str(item["url"])))
+    table.add_row("Prompt Type", escape(prompt_type))
+    table.add_row("Text", escape(text[:TEXT_PREVIEW_LENGTH].replace("\n", " ")))
+    table.add_row("Rewrite", escape(rewrite.strip()))
     table.add_row("Output Chars", str(len(rewrite)))
     table.add_row("Output Tokens", str(output_tokens) if output_tokens is not None else "N/A")
 
@@ -40,7 +41,7 @@ def print_skip(console: Console, message: str, offset: int) -> None:
     # ---------------------------------------------------------
     console.print(
         Panel(
-            message,
+            escape(message),
             title=f"Skipped offset {offset}",
             border_style="yellow",
         )
