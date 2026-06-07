@@ -6,6 +6,7 @@ from src.rewrite_runner import (
     RewriteFailure,
     RewriteJob,
     RewriteSuccess,
+    ProjectWorkerPool,
     WorkerScaler,
     iter_rewrite_job_queue,
     run_rewrite_jobs,
@@ -38,6 +39,7 @@ def test_run_rewrite_jobs_with_one_worker(monkeypatch: pytest.MonkeyPatch) -> No
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         return GemmaResponse(text=f"rewrite for {prompt}", output_tokens=10)
 
@@ -62,6 +64,7 @@ def test_run_rewrite_jobs_with_multiple_workers(monkeypatch: pytest.MonkeyPatch)
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         return GemmaResponse(text=f"rewrite for {prompt}", output_tokens=10)
 
@@ -87,6 +90,7 @@ def test_run_rewrite_jobs_keeps_successes_when_one_job_fails(
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         if prompt == "prompt-1":
             raise RuntimeError("failed")
@@ -117,6 +121,7 @@ def test_run_rewrite_jobs_returns_input_order_after_out_of_order_completion(
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         if prompt == "prompt-0":
             time.sleep(0.02)
@@ -152,6 +157,7 @@ def test_iter_rewrite_job_queue_starts_with_one_worker(
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         if prompt == "prompt-0":
             time.sleep(0.05)
@@ -165,6 +171,7 @@ def test_iter_rewrite_job_queue_starts_with_one_worker(
             get_next_job=get_next_job,
             workers=2,
             system_prompt="system",
+            project_ids=["project-0"],
         )
     )
 
@@ -248,3 +255,25 @@ def test_worker_scaler_success_resets_failure_streak() -> None:
     scaler.record_error(RuntimeError("timeout"))
 
     assert scaler.current_workers == 5
+
+
+def test_project_worker_pool_scales_projects_independently() -> None:
+    # ---------------------------------------------------------
+    # Verify that one project can scale without changing others.
+    # ---------------------------------------------------------
+    pool = ProjectWorkerPool(
+        project_ids=["project-0", "project-1"],
+        max_workers_per_project=2,
+    )
+
+    assert pool.borrow_project_id() == "project-0"
+    assert pool.borrow_project_id() == "project-1"
+    assert pool.borrow_project_id() is None
+
+    pool.return_project_id("project-0")
+
+    for _ in range(3):
+        pool.record_success("project-0")
+
+    assert pool.borrow_project_id() == "project-0"
+    assert pool.borrow_project_id() == "project-0"

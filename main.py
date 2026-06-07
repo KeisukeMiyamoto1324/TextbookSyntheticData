@@ -24,8 +24,8 @@ from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
 from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_resume_state
+from src.project_router import project_router
 from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
-from src.vertex_client import configure_project_slots
 
 
 SYSTEM_PROMPT: str = ""
@@ -67,15 +67,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     parser.add_argument("--resume-jsonl", type=Path, default=None)
     parser.add_argument("--workers", type=positive_int, default=10)
-    parser.add_argument("--project-slots", type=positive_int, default=5)
 
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    configure_project_slots(args.project_slots)
     console = Console()
+    project_count = len(project_router.get_project_ids())
+    max_worker_count = args.workers * project_count
     resume_mode = args.resume_jsonl is not None
     output_path = (
         args.resume_jsonl
@@ -99,7 +99,7 @@ def main() -> None:
     # ---------------------------------------------------------
     console.rule(
         f"[bold]Start rewriting {target_count} texts from offset {start_offset} "
-        f"with {args.workers} workers[/bold]"
+        f"with {args.workers} workers per project[/bold]"
     )
 
     if target_count <= 0:
@@ -149,8 +149,8 @@ def main() -> None:
             task_id = progress.add_task(
                 "Generating",
                 total=target_count,
-                current_workers=1,
-                max_workers=args.workers,
+                current_workers=project_count,
+                max_workers=max_worker_count,
             )
 
             for result in iter_rewrite_job_queue(
@@ -161,7 +161,7 @@ def main() -> None:
                 progress.update(
                     task_id,
                     current_workers=result.current_workers,
-                    max_workers=args.workers,
+                    max_workers=max_worker_count,
                 )
 
                 if isinstance(result, RewriteFailure):

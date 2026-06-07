@@ -9,6 +9,24 @@ import main as app
 from src.vertex_client import GemmaResponse
 
 
+class FakeProjectRouter:
+    def get_project_ids(self) -> list[str]:
+        # ---------------------------------------------------------
+        # Return stable project IDs for main runner tests.
+        # ---------------------------------------------------------
+        return ["project-0"]
+
+
+def patch_project_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ---------------------------------------------------------
+    # Use test project IDs for progress and queue scheduling.
+    # ---------------------------------------------------------
+    fake_router = FakeProjectRouter()
+
+    monkeypatch.setattr(app, "project_router", fake_router)
+    monkeypatch.setattr("src.rewrite_runner.project_router", fake_router)
+
+
 def test_main_resumes_jsonl_until_target_saved_count(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -37,7 +55,6 @@ def test_main_resumes_jsonl_until_target_saved_count(
             output_dir=tmp_path,
             resume_jsonl=output_path,
             workers=1,
-            project_slots=5,
         )
 
     def fake_iter_rows(
@@ -58,12 +75,14 @@ def test_main_resumes_jsonl_until_target_saved_count(
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         return GemmaResponse(text="rewrite", output_tokens=3)
 
     monkeypatch.setattr(app, "parse_args", fake_parse_args)
     monkeypatch.setattr(app, "iter_rows", fake_iter_rows)
     monkeypatch.setattr("src.rewrite_runner.ask_gemma4", fake_ask_gemma4)
+    patch_project_router(monkeypatch)
 
     app.main()
 
@@ -95,10 +114,10 @@ def test_main_does_not_touch_jsonl_when_resume_target_is_done(
             output_dir=tmp_path,
             resume_jsonl=output_path,
             workers=1,
-            project_slots=5,
         )
 
     monkeypatch.setattr(app, "parse_args", fake_parse_args)
+    patch_project_router(monkeypatch)
 
     app.main()
 
@@ -123,7 +142,6 @@ def test_main_does_not_count_failed_jobs(
             output_dir=tmp_path,
             resume_jsonl=None,
             workers=1,
-            project_slots=5,
         )
 
     def fake_build_results_jsonl_path(output_dir: Path) -> Path:
@@ -147,6 +165,7 @@ def test_main_does_not_count_failed_jobs(
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
+        project_id: str | None = None,
     ) -> GemmaResponse:
         if "text-1" in prompt:
             raise RuntimeError("failed")
@@ -157,6 +176,7 @@ def test_main_does_not_count_failed_jobs(
     monkeypatch.setattr(app, "build_results_jsonl_path", fake_build_results_jsonl_path)
     monkeypatch.setattr(app, "iter_rows", fake_iter_rows)
     monkeypatch.setattr("src.rewrite_runner.ask_gemma4", fake_ask_gemma4)
+    patch_project_router(monkeypatch)
 
     app.main()
 

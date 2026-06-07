@@ -78,14 +78,16 @@ def ask_gemma4(
     prompt: str,
     system_prompt: str,
     on_retry: Callable[[Exception], None] | None = None,
+    project_id: str | None = None,
 ) -> GemmaResponse:
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
-    project_id = project_router.borrow_project_id()
+    borrowed_project_id = project_id or project_router.borrow_project_id()
+    should_return_project = project_id is None
 
     def request_completion() -> openai.types.chat.ChatCompletion:
-        client = create_client(project_id)
+        client = create_client(borrowed_project_id)
         time.sleep(REQUEST_INTERVAL_SECONDS)
 
         with REQUEST_LIMITER:
@@ -113,7 +115,8 @@ def ask_gemma4(
     try:
         response = run_with_backoff(request_completion, is_retryable_error, on_retry)
     finally:
-        project_router.return_project_id(project_id)
+        if should_return_project:
+            project_router.return_project_id(borrowed_project_id)
 
     if isinstance(response, str):
         raise ValueError(response)

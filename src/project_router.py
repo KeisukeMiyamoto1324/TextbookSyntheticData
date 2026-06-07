@@ -20,6 +20,12 @@ class ProjectRouter:
             self.max_slots_per_project = max_slots_per_project
             self.condition.notify_all()
 
+    def get_project_ids(self) -> list[str]:
+        # ---------------------------------------------------------
+        # Return configured project IDs without exposing internal state.
+        # ---------------------------------------------------------
+        return list(self.project_ids)
+
     def next_project_id(self) -> str:
         # ---------------------------------------------------------
         # Return project IDs in order for parallel API requests.
