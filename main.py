@@ -25,6 +25,7 @@ from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
 from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_resume_state
 from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
+from src.vertex_client import configure_project_slots
 
 
 SYSTEM_PROMPT: str = ""
@@ -66,12 +67,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     parser.add_argument("--resume-jsonl", type=Path, default=None)
     parser.add_argument("--workers", type=positive_int, default=10)
+    parser.add_argument("--project-slots", type=positive_int, default=5)
 
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    configure_project_slots(args.project_slots)
     console = Console()
     resume_mode = args.resume_jsonl is not None
     output_path = (

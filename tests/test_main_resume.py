@@ -37,6 +37,7 @@ def test_main_resumes_jsonl_until_target_saved_count(
             output_dir=tmp_path,
             resume_jsonl=output_path,
             workers=1,
+            project_slots=5,
         )
 
     def fake_iter_rows(
@@ -94,6 +95,7 @@ def test_main_does_not_touch_jsonl_when_resume_target_is_done(
             output_dir=tmp_path,
             resume_jsonl=output_path,
             workers=1,
+            project_slots=5,
         )
 
     monkeypatch.setattr(app, "parse_args", fake_parse_args)
@@ -121,6 +123,7 @@ def test_main_does_not_count_failed_jobs(
             output_dir=tmp_path,
             resume_jsonl=None,
             workers=1,
+            project_slots=5,
         )
 
     def fake_build_results_jsonl_path(output_dir: Path) -> Path:

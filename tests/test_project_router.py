@@ -35,6 +35,39 @@ def test_project_router_requires_project_id() -> None:
         router.next_project_id()
 
 
+def test_project_router_borrows_least_busy_project() -> None:
+    # ---------------------------------------------------------
+    # Verify that borrowed slots are spread across projects.
+    # ---------------------------------------------------------
+    router = ProjectRouter(
+        ["project-0", "project-1", "project-2"],
+        max_slots_per_project=2,
+    )
+
+    assert router.borrow_project_id() == "project-0"
+    assert router.borrow_project_id() == "project-1"
+    assert router.borrow_project_id() == "project-2"
+    assert router.borrow_project_id() == "project-0"
+    assert router.borrow_project_id() == "project-1"
+
+
+def test_project_router_returns_borrowed_slot() -> None:
+    # ---------------------------------------------------------
+    # Verify that returned slots are available for new requests.
+    # ---------------------------------------------------------
+    router = ProjectRouter(
+        ["project-0", "project-1"],
+        max_slots_per_project=1,
+    )
+
+    assert router.borrow_project_id() == "project-0"
+    assert router.borrow_project_id() == "project-1"
+
+    router.return_project_id("project-0")
+
+    assert router.borrow_project_id() == "project-0"
+
+
 def test_load_project_ids_reads_numbered_ids_first(monkeypatch: pytest.MonkeyPatch) -> None:
     # ---------------------------------------------------------
     # Verify that numbered project IDs are preferred.

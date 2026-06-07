@@ -29,6 +29,13 @@ class EmptyChoicesError(Exception):
     pass
 
 
+def configure_project_slots(max_slots_per_project: int) -> None:
+    # ---------------------------------------------------------
+    # Set how many logical requests can use each project at once.
+    # ---------------------------------------------------------
+    project_router.set_max_slots_per_project(max_slots_per_project)
+
+
 def create_client(project_id: str) -> openai.OpenAI:
     # ---------------------------------------------------------
     # Refresh the access token before each API client creation.
@@ -75,7 +82,7 @@ def ask_gemma4(
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
-    project_id = project_router.next_project_id()
+    project_id = project_router.borrow_project_id()
 
     def request_completion() -> openai.types.chat.ChatCompletion:
         client = create_client(project_id)
@@ -103,7 +110,10 @@ def ask_gemma4(
 
         return response
 
-    response = run_with_backoff(request_completion, is_retryable_error, on_retry)
+    try:
+        response = run_with_backoff(request_completion, is_retryable_error, on_retry)
+    finally:
+        project_router.return_project_id(project_id)
 
     if isinstance(response, str):
         raise ValueError(response)
