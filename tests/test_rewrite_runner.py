@@ -195,9 +195,9 @@ def test_worker_scaler_does_not_exceed_max_workers() -> None:
     assert scaler.current_workers == 2
 
 
-def test_worker_scaler_reduces_twenty_percent_on_rate_limit_error() -> None:
+def test_worker_scaler_reduces_twenty_percent_on_request_failure() -> None:
     # ---------------------------------------------------------
-    # Verify that rate limit errors reduce concurrency by twenty percent.
+    # Verify that request failures reduce concurrency by twenty percent.
     # ---------------------------------------------------------
     scaler = WorkerScaler(max_workers=10)
 
@@ -209,9 +209,9 @@ def test_worker_scaler_reduces_twenty_percent_on_rate_limit_error() -> None:
     assert scaler.current_workers == 4
 
 
-def test_worker_scaler_reduces_on_temporary_server_error() -> None:
+def test_worker_scaler_reduces_twenty_percent_on_temporary_server_error() -> None:
     # ---------------------------------------------------------
-    # Verify that temporary server errors reduce concurrency by one.
+    # Verify that temporary server errors use the same failure rule.
     # ---------------------------------------------------------
     class FakeStatusError(Exception):
         def __init__(self, status_code: int) -> None:

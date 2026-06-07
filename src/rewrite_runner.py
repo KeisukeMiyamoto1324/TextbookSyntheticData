@@ -41,7 +41,7 @@ class RewriteFailure:
 RewriteResult = RewriteSuccess | RewriteFailure
 GetNextJob = Callable[[int], RewriteJob | None]
 SUCCESS_SCALE_STEP: int = 10
-RATE_LIMIT_SCALE_FACTOR: float = 0.8
+REQUEST_FAILURE_SCALE_FACTOR: float = 0.8
 
 
 class WorkerScaler:
@@ -79,36 +79,26 @@ class WorkerScaler:
         with self.lock:
             self.success_streak = 0
 
-            if is_rate_limit_error(error):
+            if is_request_failure_error(error):
                 self.current_workers = max(
                     1,
-                    int(self.current_workers * RATE_LIMIT_SCALE_FACTOR),
+                    int(self.current_workers * REQUEST_FAILURE_SCALE_FACTOR),
                 )
-                return
-
-            if is_temporary_server_error(error):
-                self.current_workers = max(1, self.current_workers - 1)
 
 
-def is_rate_limit_error(error: Exception) -> bool:
+def is_request_failure_error(error: Exception) -> bool:
     # ---------------------------------------------------------
-    # Detect API rate limit errors from status code or message text.
+    # Detect request failures that should reduce API pressure.
     # ---------------------------------------------------------
     status_code = getattr(error, "status_code", None)
 
-    if status_code == 429:
+    if status_code in {429, 500, 502, 503, 504}:
         return True
 
-    return "429" in str(error)
+    error_text = str(error).lower()
+    failure_words = ("429", "timeout", "timed out", "connection", "rate limit")
 
-
-def is_temporary_server_error(error: Exception) -> bool:
-    # ---------------------------------------------------------
-    # Detect temporary server errors that should reduce pressure.
-    # ---------------------------------------------------------
-    status_code = getattr(error, "status_code", None)
-
-    return status_code in {500, 502, 503, 504}
+    return any(word in error_text for word in failure_words)
 
 
 def run_rewrite_jobs(
