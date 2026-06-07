@@ -1,4 +1,3 @@
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -11,10 +10,14 @@ from src.retry import run_with_backoff
 from src.vertex_auth import create_client
 
 
-REQUEST_INTERVAL_SECONDS: float = 1.0
+REQUEST_LIMIT_PER_MINUTE: int = 120
+SECONDS_PER_MINUTE: int = 60
 EMPTY_CHOICES_ERROR_MESSAGE: str = "response does not contain choices"
 RETRYABLE_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
-REQUEST_LIMITER = Limiter(rate=1, capacity=1)
+REQUEST_LIMITER = Limiter(
+    rate=REQUEST_LIMIT_PER_MINUTE / SECONDS_PER_MINUTE,
+    capacity=REQUEST_LIMIT_PER_MINUTE,
+)
 
 
 @dataclass(frozen=True)
@@ -59,7 +62,6 @@ def ask_gemma4(
 
     def request_completion() -> openai.types.chat.ChatCompletion:
         client = create_client(borrowed_project_id)
-        time.sleep(REQUEST_INTERVAL_SECONDS)
 
         with REQUEST_LIMITER:
             response = client.chat.completions.create(

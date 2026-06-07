@@ -74,7 +74,6 @@ def test_ask_gemma4_keeps_project_id_on_retry(
     monkeypatch.setattr(vertex_client, "project_router", ProjectRouter(["project-0", "project-1"]))
     monkeypatch.setattr(vertex_client, "create_client", fake_create_client)
     monkeypatch.setattr(vertex_client, "REQUEST_LIMITER", limiter)
-    monkeypatch.setattr(vertex_client.time, "sleep", lambda seconds: None)
     monkeypatch.setattr("src.retry.time.sleep", lambda seconds: None)
 
     response = vertex_client.ask_gemma4(
