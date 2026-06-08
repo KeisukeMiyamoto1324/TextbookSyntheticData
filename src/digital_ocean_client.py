@@ -14,7 +14,7 @@ DIGITAL_OCEAN_CHAT_COMPLETIONS_URL: str = (
     "https://inference.do-ai.run/v1/chat/completions"
 )
 DIGITAL_OCEAN_TIMEOUT_SECONDS: int = 60
-DIGITAL_OCEAN_MAX_TOKENS: int = 300
+DIGITAL_OCEAN_MAX_TOKENS: int = 2048
 
 
 def is_retryable_error(error: Exception) -> bool:
