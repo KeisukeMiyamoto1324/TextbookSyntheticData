@@ -34,6 +34,7 @@ def test_run_rewrite_jobs_with_one_worker(monkeypatch: pytest.MonkeyPatch) -> No
     # Verify that the runner creates records with one worker.
     # ---------------------------------------------------------
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
@@ -59,6 +60,7 @@ def test_run_rewrite_jobs_with_multiple_workers(monkeypatch: pytest.MonkeyPatch)
     # Verify that multiple jobs can be processed by threads.
     # ---------------------------------------------------------
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
@@ -85,6 +87,7 @@ def test_run_rewrite_jobs_keeps_successes_when_one_job_fails(
     # Verify that one failed job does not remove successful jobs.
     # ---------------------------------------------------------
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
@@ -116,6 +119,7 @@ def test_run_rewrite_jobs_returns_input_order_after_out_of_order_completion(
     # Verify that slow earlier jobs still appear first in results.
     # ---------------------------------------------------------
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
@@ -152,6 +156,7 @@ def test_iter_rewrite_job_queue_starts_with_one_worker(
             return None
 
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
@@ -174,4 +179,3 @@ def test_iter_rewrite_job_queue_starts_with_one_worker(
     )
 
     assert [result.index for result in results] == [0, 1, 2]
-

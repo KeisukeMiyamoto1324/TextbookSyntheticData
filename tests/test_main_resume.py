@@ -55,6 +55,7 @@ def test_main_resumes_jsonl_until_target_saved_count(
             output_dir=tmp_path,
             resume_jsonl=output_path,
             workers=1,
+            provider="vertex",
         )
 
     def fake_iter_rows(
@@ -72,6 +73,7 @@ def test_main_resumes_jsonl_until_target_saved_count(
             }
 
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,
@@ -114,6 +116,7 @@ def test_main_does_not_touch_jsonl_when_resume_target_is_done(
             output_dir=tmp_path,
             resume_jsonl=output_path,
             workers=1,
+            provider="vertex",
         )
 
     monkeypatch.setattr(app, "parse_args", fake_parse_args)
@@ -142,6 +145,7 @@ def test_main_does_not_count_failed_jobs(
             output_dir=tmp_path,
             resume_jsonl=None,
             workers=1,
+            provider="vertex",
         )
 
     def fake_build_results_jsonl_path(output_dir: Path) -> Path:
@@ -162,6 +166,7 @@ def test_main_does_not_count_failed_jobs(
             }
 
     def fake_ask_gemma4(
+        provider: str,
         prompt: str,
         system_prompt: str,
         on_retry: object = None,

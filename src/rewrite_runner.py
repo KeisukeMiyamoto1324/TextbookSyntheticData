@@ -9,10 +9,11 @@ from concurrent.futures import (
 from dataclasses import dataclass
 from typing import Any
 
+from src.gemma_client import GenerationProvider
+from src.gemma_client import ask_gemma4
 from src.project_worker_pool import ProjectWorkerPool
 from src.project_router import project_router
 from src.rewrite_record import RewriteRecord
-from src.vertex_client import ask_gemma4
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ def run_rewrite_jobs(
     jobs: list[RewriteJob],
     workers: int,
     system_prompt: str,
+    provider: GenerationProvider = "vertex",
 ) -> list[RewriteResult]:
     # ---------------------------------------------------------
     # Run rewrite jobs with threads and return results in input order.
@@ -57,7 +59,8 @@ def run_rewrite_jobs(
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_job = {
-            executor.submit(_run_rewrite_job, job, system_prompt): job for job in jobs
+            executor.submit(_run_rewrite_job, job, system_prompt, provider): job
+            for job in jobs
         }
 
         for future in as_completed(future_to_job):
@@ -90,6 +93,7 @@ def iter_rewrite_job_queue(
     get_next_job: GetNextJob,
     workers: int,
     system_prompt: str,
+    provider: GenerationProvider = "vertex",
     project_ids: list[str] | None = None,
 ) -> Iterator[RewriteResult]:
     # ---------------------------------------------------------
@@ -99,6 +103,11 @@ def iter_rewrite_job_queue(
         project_router.get_project_ids()
         if project_ids is None
         else project_ids
+    )
+    selected_project_ids = (
+        selected_project_ids
+        if provider == "vertex"
+        else ["digital-ocean"]
     )
     pool = ProjectWorkerPool(
         project_ids=selected_project_ids,
@@ -126,6 +135,7 @@ def iter_rewrite_job_queue(
                         _run_rewrite_job,
                         job,
                         system_prompt,
+                        provider,
                         lambda error, selected_project_id=project_id: pool.record_error(
                             selected_project_id,
                             error,
@@ -169,6 +179,7 @@ def iter_rewrite_job_queue(
 def _run_rewrite_job(
     job: RewriteJob,
     system_prompt: str,
+    provider: GenerationProvider,
     on_retry: Callable[[Exception], None] | None = None,
     project_id: str | None = None,
 ) -> RewriteRecord:
@@ -176,6 +187,7 @@ def _run_rewrite_job(
     # Generate one rewrite and convert it to a record.
     # ---------------------------------------------------------
     response = ask_gemma4(
+        provider=provider,
         prompt=job.prompt,
         system_prompt=system_prompt,
         on_retry=on_retry,

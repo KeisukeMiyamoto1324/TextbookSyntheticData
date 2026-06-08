@@ -6,4 +6,5 @@ PROJECT_ID_ENV_NAME: str = "GOOGLE_CLOUD_PROJECT"
 PROJECT_ID_ENV_PREFIX: str = "GOOGLE_CLOUD_PROJECT_"
 LOCATION: str = "global"
 MODEL: str = "google/gemma-4-26b-a4b-it-maas"
+DIGITAL_OCEAN_MODEL: str = "gemma-4-31B-it"
 ENABLE_THINKING: bool = False

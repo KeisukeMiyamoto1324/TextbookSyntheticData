@@ -20,6 +20,7 @@ from src.build_prompt import (
 from src.cli import non_negative_int, positive_int
 from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
+from src.gemma_client import GenerationProvider
 from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_resume_state
 from src.progress_display import EstimatedFinishColumn
 from src.project_router import project_router
@@ -46,6 +47,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     parser.add_argument("--resume-jsonl", type=Path, default=None)
     parser.add_argument("--workers", type=positive_int, default=50)
+    parser.add_argument(
+        "--provider",
+        choices=["vertex", "digital-ocean"],
+        required=True,
+    )
 
     return parser.parse_args()
 
@@ -53,7 +59,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     console = Console()
-    project_count = len(project_router.get_project_ids())
+    provider: GenerationProvider = args.provider
+    project_count = len(project_router.get_project_ids()) if provider == "vertex" else 1
     max_worker_count = args.workers * project_count
     resume_mode = args.resume_jsonl is not None
     output_path = (
@@ -136,6 +143,7 @@ def main() -> None:
                 get_next_job=get_next_job,
                 workers=args.workers,
                 system_prompt=SYSTEM_PROMPT,
+                provider=provider,
             ):
                 progress.update(
                     task_id,
