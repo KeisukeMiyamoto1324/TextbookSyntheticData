@@ -13,6 +13,7 @@ from src.rewrite_record import RewriteRecord
 class JsonlResumeState:
     max_offset: int
     record_count: int
+    total_output_tokens: int
 
 
 def build_results_jsonl_path(output_dir: Path) -> Path:
@@ -30,6 +31,7 @@ def read_resume_state(jsonl_path: Path) -> JsonlResumeState:
     # ---------------------------------------------------------
     max_offset: int | None = None
     record_count = 0
+    total_output_tokens = 0
 
     with jsonl_path.open("r", encoding="utf-8") as file:
         for line_number, line in enumerate(file, start=1):
@@ -45,10 +47,17 @@ def read_resume_state(jsonl_path: Path) -> JsonlResumeState:
             if "offset" not in record:
                 raise ValueError(f"line {line_number} does not contain offset")
 
+            if "output_tokens" not in record:
+                raise ValueError(f"line {line_number} does not contain output_tokens")
+
             offset = int(record["offset"])
+            output_tokens = record["output_tokens"]
 
             if max_offset is None or offset > max_offset:
                 max_offset = offset
+
+            if output_tokens is not None:
+                total_output_tokens += int(output_tokens)
 
             record_count += 1
 
@@ -58,6 +67,7 @@ def read_resume_state(jsonl_path: Path) -> JsonlResumeState:
     return JsonlResumeState(
         max_offset=max_offset,
         record_count=record_count,
+        total_output_tokens=total_output_tokens,
     )
 
 

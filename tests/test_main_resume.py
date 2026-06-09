@@ -38,8 +38,8 @@ def test_main_resumes_jsonl_until_target_saved_count(
     output_path.write_text(
         "\n".join(
             [
-                json.dumps({"offset": 0}),
-                json.dumps({"offset": 2}),
+                json.dumps({"offset": 0, "output_tokens": 10}),
+                json.dumps({"offset": 2, "output_tokens": 20}),
             ]
         )
         + "\n",
@@ -107,14 +107,15 @@ def test_main_progress_total_uses_requested_count_on_resume(
     output_path.write_text(
         "\n".join(
             [
-                json.dumps({"offset": 0}),
-                json.dumps({"offset": 2}),
+                json.dumps({"offset": 0, "output_tokens": 10}),
+                json.dumps({"offset": 2, "output_tokens": 20}),
             ]
         )
         + "\n",
         encoding="utf-8",
     )
     add_task_kwargs: dict[str, object] = {}
+    update_kwargs_list: list[dict[str, object]] = []
 
     class FakeProgress:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -131,7 +132,7 @@ def test_main_progress_total_uses_requested_count_on_resume(
             return 1
 
         def update(self, task_id: int, **kwargs: object) -> None:
-            pass
+            update_kwargs_list.append(kwargs)
 
     def fake_parse_args() -> argparse.Namespace:
         return argparse.Namespace(
@@ -176,6 +177,12 @@ def test_main_progress_total_uses_requested_count_on_resume(
 
     assert add_task_kwargs["total"] == 5
     assert add_task_kwargs["completed"] == 2
+    assert add_task_kwargs["total_output_tokens"] == 30
+    assert [
+        update_kwargs["total_output_tokens"]
+        for update_kwargs in update_kwargs_list
+        if "total_output_tokens" in update_kwargs
+    ] == [33, 36, 39]
 
 
 def test_main_does_not_touch_jsonl_when_resume_target_is_done(
@@ -186,7 +193,7 @@ def test_main_does_not_touch_jsonl_when_resume_target_is_done(
     # Verify that completed resume targets do not append data.
     # ---------------------------------------------------------
     output_path = tmp_path / "rewrites.jsonl"
-    saved_text = json.dumps({"offset": 2})
+    saved_text = json.dumps({"offset": 2, "output_tokens": 10})
     output_path.write_text(saved_text, encoding="utf-8")
 
     def fake_parse_args() -> argparse.Namespace:
