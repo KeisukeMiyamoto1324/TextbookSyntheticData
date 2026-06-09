@@ -134,7 +134,8 @@ def main() -> None:
         with progress:
             task_id = progress.add_task(
                 "Generating",
-                total=target_count,
+                total=args.count,
+                completed=existing_count,
                 current_workers=project_count,
                 max_workers=max_worker_count,
             )
