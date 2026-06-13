@@ -1,0 +1,48 @@
+---
+license: apache-2.0
+---
+
+# SyntheticTextbook-jp
+
+SyntheticTextbook-jp is a Japanese synthetic text dataset generated with Gemma 4 26B and Gemma 4 31B. The dataset was created by rewriting noisy source text into textbook-style Japanese for elementary school, junior high school, and high school levels. The rewritten text keeps only general knowledge from the source text.
+
+## Purpose
+
+The main purpose of this dataset is to help LLMs learn natural Japanese text flow. This dataset is designed around topics that an average Japanese student may learn in school classes. Therefore, it may not be suitable for training LLMs to learn broad factual knowledge.
+
+## Source Data
+
+The source text comes from:
+
+https://huggingface.co/datasets/hotchpotch/fineweb-2-edu-japanese
+
+## Dataset Size
+
+- Rows: 345,830
+- Total output tokens: 302M gemma4 tokens
+
+## Columns
+
+| Column | Description |
+|---|---|
+| `source_id` | ID of the source text. |
+| `url` | URL from the source dataset. |
+| `source_text` | Original noisy source text. |
+| `prompt_type` | Target school level: `elementary-school`, `junior-high-school`, or `high-school`. |
+| `prompt` | Input text used for rewriting. |
+| `rewrite` | Synthetic textbook-style Japanese text. |
+| `output_tokens` | Number of tokens in `rewrite`. |
+| `output_chars` | Number of characters in `rewrite`. |
+
+## Example
+
+```python
+from datasets import load_dataset
+
+dataset = load_dataset("MK0727/SyntheticTextbook-jp", split="train")
+print(dataset[0]["rewrite"])
+```
+
+## Notes
+
+This is synthetic data. Users should check whether the style, quality, and topic coverage are suitable for their own use case.

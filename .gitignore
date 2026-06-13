@@ -4,3 +4,4 @@ venv/
 **.json
 **.jsonl
 **.txt
+**.parquet
