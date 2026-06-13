@@ -1,31 +1,33 @@
 from pathlib import Path
 
 from dotenv import load_dotenv
-from huggingface_hub import HfApi
+from huggingface_hub import CommitOperationAdd, HfApi
 
 
 REPO_ID = "MK0727/SyntheticTextbook-jp"
-LOCAL_FILE = Path("results/textbook.parquet")
-REMOTE_FILE = "textbook.parquet"
+PARQUET_FILE = Path("results/textbook.parquet")
+README_FILE = Path("README.md")
 
 
 def main() -> None:
     # ---------------------------------------------------------
-    # Load HF_TOKEN from .env and upload the parquet file.
+    # Load HF_TOKEN from .env and upload dataset files.
     # ---------------------------------------------------------
     load_dotenv()
 
     api = HfApi()
     api.create_repo(repo_id=REPO_ID, repo_type="dataset", exist_ok=True)
-    commit = api.upload_file(
-        path_or_fileobj=LOCAL_FILE,
-        path_in_repo=REMOTE_FILE,
+    commit = api.create_commit(
         repo_id=REPO_ID,
         repo_type="dataset",
-        commit_message="Upload cleaned textbook parquet",
+        operations=[
+            CommitOperationAdd(path_in_repo="textbook.parquet", path_or_fileobj=PARQUET_FILE),
+            CommitOperationAdd(path_in_repo="README.md", path_or_fileobj=README_FILE),
+        ],
+        commit_message="Upload textbook dataset files",
     )
 
-    print(commit)
+    print(commit.commit_url)
 
 
 if __name__ == "__main__":
