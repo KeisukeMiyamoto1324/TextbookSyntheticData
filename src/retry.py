@@ -17,7 +17,7 @@ def run_with_backoff(
     # ---------------------------------------------------------
     # Retry temporary API errors with exponential backoff.
     # ---------------------------------------------------------
-    for retry_count in range(MAX_RETRY_COUNT + 1):
+    for retry_count in range(1, MAX_RETRY_COUNT + 1):
         try:
             return operation()
         except Exception as error:
@@ -27,6 +27,6 @@ def run_with_backoff(
             if on_retry is not None:
                 on_retry(error)
 
-            time.sleep(4**retry_count)
+            time.sleep(5**retry_count)
 
     raise RuntimeError("retry loop ended unexpectedly")

@@ -38,8 +38,8 @@ def test_main_resumes_jsonl_until_target_saved_count(
     output_path.write_text(
         "\n".join(
             [
-                json.dumps({"offset": 0}),
-                json.dumps({"offset": 2}),
+                json.dumps({"offset": 0, "output_tokens": 10}),
+                json.dumps({"offset": 2, "output_tokens": 20}),
             ]
         )
         + "\n",
@@ -96,6 +96,95 @@ def test_main_resumes_jsonl_until_target_saved_count(
     assert offsets == [0, 2, 3, 4, 5]
 
 
+def test_main_progress_total_uses_requested_count_on_resume(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # ---------------------------------------------------------
+    # Verify that progress total shows requested count, not remaining count.
+    # ---------------------------------------------------------
+    output_path = tmp_path / "rewrites.jsonl"
+    output_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"offset": 0, "output_tokens": 10}),
+                json.dumps({"offset": 2, "output_tokens": 20}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    add_task_kwargs: dict[str, object] = {}
+    update_kwargs_list: list[dict[str, object]] = []
+
+    class FakeProgress:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "FakeProgress":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+        def add_task(self, description: str, **kwargs: object) -> int:
+            add_task_kwargs.update(kwargs)
+            return 1
+
+        def update(self, task_id: int, **kwargs: object) -> None:
+            update_kwargs_list.append(kwargs)
+
+    def fake_parse_args() -> argparse.Namespace:
+        return argparse.Namespace(
+            count=5,
+            offset=0,
+            config="default",
+            split="train",
+            output_dir=tmp_path,
+            resume_jsonl=output_path,
+            workers=1,
+            provider="vertex",
+        )
+
+    def fake_iter_rows(
+        config: str,
+        split: str,
+        start_offset: int,
+    ) -> Iterator[tuple[int, dict[str, str]]]:
+        for offset in [3, 4, 5]:
+            yield offset, {
+                "id": f"source-{offset}",
+                "url": "https://example.com",
+                "text": f"text-{offset}",
+            }
+
+    def fake_ask_gemma4(
+        provider: str,
+        prompt: str,
+        system_prompt: str,
+        on_retry: object = None,
+        project_id: str | None = None,
+    ) -> GemmaResponse:
+        return GemmaResponse(text="rewrite", output_tokens=3)
+
+    monkeypatch.setattr(app, "parse_args", fake_parse_args)
+    monkeypatch.setattr(app, "iter_rows", fake_iter_rows)
+    monkeypatch.setattr(app, "Progress", FakeProgress)
+    monkeypatch.setattr("src.rewrite_runner.ask_gemma4", fake_ask_gemma4)
+    patch_project_router(monkeypatch)
+
+    app.main()
+
+    assert add_task_kwargs["total"] == 5
+    assert add_task_kwargs["completed"] == 2
+    assert add_task_kwargs["total_output_tokens"] == 30
+    assert [
+        update_kwargs["total_output_tokens"]
+        for update_kwargs in update_kwargs_list
+        if "total_output_tokens" in update_kwargs
+    ] == [33, 36, 39]
+
+
 def test_main_does_not_touch_jsonl_when_resume_target_is_done(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -104,7 +193,7 @@ def test_main_does_not_touch_jsonl_when_resume_target_is_done(
     # Verify that completed resume targets do not append data.
     # ---------------------------------------------------------
     output_path = tmp_path / "rewrites.jsonl"
-    saved_text = json.dumps({"offset": 2})
+    saved_text = json.dumps({"offset": 2, "output_tokens": 10})
     output_path.write_text(saved_text, encoding="utf-8")
 
     def fake_parse_args() -> argparse.Namespace:

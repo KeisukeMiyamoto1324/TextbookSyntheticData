@@ -22,7 +22,7 @@ from src.dataset_client import iter_rows
 from src.display import print_result, print_skip
 from src.gemma_client import GenerationProvider
 from src.json_writer import JsonlRecordWriter, build_results_jsonl_path, read_resume_state
-from src.progress_display import EstimatedFinishColumn
+from src.progress_display import EstimatedFinishColumn, TokenCountColumn
 from src.project_router import project_router
 from src.rewrite_runner import RewriteFailure, RewriteJob, iter_rewrite_job_queue
 
@@ -71,6 +71,11 @@ def main() -> None:
     resume_state = read_resume_state(output_path) if resume_mode else None
     start_offset = resume_state.max_offset + 1 if resume_state is not None else args.offset
     existing_count = resume_state.record_count if resume_state is not None else 0
+    existing_output_tokens = (
+        resume_state.total_output_tokens
+        if resume_state is not None
+        else 0
+    )
     target_count = max(0, args.count - existing_count)
     row_iterator = iter_rows(
         config=args.config,
@@ -78,6 +83,7 @@ def main() -> None:
         start_offset=start_offset,
     )
     written_count = 0
+    total_output_tokens = existing_output_tokens
     job_index = start_offset if resume_mode else 0
 
     # ---------------------------------------------------------
@@ -124,6 +130,8 @@ def main() -> None:
             TextColumn("[bold]Generating[/bold]"),
             BarColumn(),
             TextColumn("{task.completed}/{task.total} texts"),
+            TextColumn("{task.percentage:>5.1f}%"),
+            TokenCountColumn(),
             TextColumn("Workers {task.fields[current_workers]}/{task.fields[max_workers]}"),
             TimeRemainingColumn(),
             TimeElapsedColumn(),
@@ -134,9 +142,11 @@ def main() -> None:
         with progress:
             task_id = progress.add_task(
                 "Generating",
-                total=target_count,
+                total=args.count,
+                completed=existing_count,
                 current_workers=project_count,
                 max_workers=max_worker_count,
+                total_output_tokens=total_output_tokens,
             )
 
             for result in iter_rewrite_job_queue(
@@ -157,8 +167,15 @@ def main() -> None:
 
                 written_count += 1
                 record = result.record
+                if record.output_tokens is not None:
+                    total_output_tokens += record.output_tokens
+
                 writer.write(record)
-                progress.update(task_id, advance=1)
+                progress.update(
+                    task_id,
+                    advance=1,
+                    total_output_tokens=total_output_tokens,
+                )
 
                 print_result(
                     console=console,

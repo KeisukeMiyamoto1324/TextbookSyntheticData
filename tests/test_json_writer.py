@@ -57,9 +57,9 @@ def test_read_max_offset_reads_largest_offset_from_unordered_jsonl(tmp_path: Pat
     output_path.write_text(
         "\n".join(
             [
-                json.dumps({"offset": 7}),
-                json.dumps({"offset": 1}),
-                json.dumps({"offset": 13}),
+                json.dumps({"offset": 7, "output_tokens": 1}),
+                json.dumps({"offset": 1, "output_tokens": 2}),
+                json.dumps({"offset": 13, "output_tokens": 3}),
             ]
         )
         + "\n",
@@ -77,9 +77,9 @@ def test_read_resume_state_reads_count_and_largest_offset(tmp_path: Path) -> Non
     output_path.write_text(
         "\n".join(
             [
-                json.dumps({"offset": 7}),
-                json.dumps({"offset": 1}),
-                json.dumps({"offset": 13}),
+                json.dumps({"offset": 7, "output_tokens": 1}),
+                json.dumps({"offset": 1, "output_tokens": 2}),
+                json.dumps({"offset": 13, "output_tokens": 3}),
             ]
         )
         + "\n",
@@ -90,6 +90,7 @@ def test_read_resume_state_reads_count_and_largest_offset(tmp_path: Path) -> Non
 
     assert state.max_offset == 13
     assert state.record_count == 3
+    assert state.total_output_tokens == 6
 
 
 def test_read_max_offset_rejects_broken_jsonl(tmp_path: Path) -> None:
@@ -97,7 +98,10 @@ def test_read_max_offset_rejects_broken_jsonl(tmp_path: Path) -> None:
     # Verify that broken resume files fail before generation.
     # ---------------------------------------------------------
     output_path = tmp_path / "rewrites.jsonl"
-    output_path.write_text('{"offset": 1}\n{"offset":', encoding="utf-8")
+    output_path.write_text(
+        '{"offset": 1, "output_tokens": 1}\n{"offset":',
+        encoding="utf-8",
+    )
 
     with pytest.raises(ValueError, match="invalid JSON at line 2"):
         read_max_offset(output_path)
@@ -108,7 +112,10 @@ def test_jsonl_record_writer_appends_without_truncating(tmp_path: Path) -> None:
     # Verify that resume writes new records after existing ones.
     # ---------------------------------------------------------
     output_path = tmp_path / "rewrites.jsonl"
-    output_path.write_text(json.dumps({"offset": 1}) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps({"offset": 1, "output_tokens": 1}) + "\n",
+        encoding="utf-8",
+    )
     record = RewriteRecord(
         offset=2,
         source_id="source-2",

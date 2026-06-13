@@ -2,7 +2,7 @@ from threading import Lock
 
 
 SUCCESS_SCALE_STEP: int = 2
-FAILURE_SCALE_STEP: int = 2
+FAILURE_SCALE_STEP: int = 1
 REQUEST_FAILURE_SCALE_FACTOR: float = 0.75
 
 
