@@ -5,7 +5,7 @@ from huggingface_hub import CommitOperationAdd, HfApi
 
 
 REPO_ID = "MK0727/SyntheticTextbook-jp"
-PARQUET_FILE = Path("results/textbook.parquet")
+PARQUET_FILES = sorted(Path("results").glob("textbook-[0-9][0-9][0-9][0-9][0-9].parquet"))
 README_FILE = Path("README.md")
 
 
@@ -15,16 +15,25 @@ def main() -> None:
     # ---------------------------------------------------------
     load_dotenv()
 
+    if len(PARQUET_FILES) != 16:
+        raise RuntimeError(f"Expected 16 Parquet shards, found {len(PARQUET_FILES)}.")
+
     api = HfApi()
     api.create_repo(repo_id=REPO_ID, repo_type="dataset", exist_ok=True)
     commit = api.create_commit(
         repo_id=REPO_ID,
         repo_type="dataset",
         operations=[
-            CommitOperationAdd(path_in_repo="textbook.parquet", path_or_fileobj=PARQUET_FILE),
+            *[
+                CommitOperationAdd(
+                    path_in_repo=parquet_file.name,
+                    path_or_fileobj=parquet_file,
+                )
+                for parquet_file in PARQUET_FILES
+            ],
             CommitOperationAdd(path_in_repo="README.md", path_or_fileobj=README_FILE),
         ],
-        commit_message="Upload textbook dataset files",
+        commit_message="Upload textbook dataset shards",
     )
 
     print(commit.commit_url)

@@ -15,8 +15,8 @@ The source text comes from: https://huggingface.co/datasets/hotchpotch/fineweb-2
 
 ## Dataset Size
 
-- Rows: 351,726
-- Total output tokens: 307.4M gemma4 tokens
+- Rows: 651,711
+- Total output tokens: 577.1M gemma4 tokens
 
 ## Columns
 
