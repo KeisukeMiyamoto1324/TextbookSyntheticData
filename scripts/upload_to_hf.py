@@ -15,9 +15,6 @@ def main() -> None:
     # ---------------------------------------------------------
     load_dotenv()
 
-    if len(PARQUET_FILES) != 16:
-        raise RuntimeError(f"Expected 16 Parquet shards, found {len(PARQUET_FILES)}.")
-
     api = HfApi()
     api.create_repo(repo_id=REPO_ID, repo_type="dataset", exist_ok=True)
     commit = api.create_commit(
