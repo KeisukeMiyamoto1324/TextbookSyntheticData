@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     parser.add_argument("--resume-jsonl", type=Path, default=None)
-    parser.add_argument("--workers", type=positive_int, default=50)
+    parser.add_argument("--workers", type=positive_int, default=20)
     parser.add_argument(
         "--provider",
         choices=["vertex", "digital-ocean"],
